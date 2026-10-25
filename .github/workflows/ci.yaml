@@ -1,0 +1,44 @@
+
+name: MarketMind CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check repository structure
+        run: |
+          echo "MarketMind CI started"
+          echo "Repository structure:"
+          ls -la
+
+      - name: Backend check
+        run: |
+          echo "Checking backend services..."
+          echo "Backend CI will be configured later"
+
+      - name: Frontend check
+        run: |
+          echo "Checking frontend..."
+          echo "Frontend CI will be configured later"
+
+      - name: Finish
+        run: echo "MarketMind CI completed"
