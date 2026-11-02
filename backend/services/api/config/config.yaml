@@ -1,0 +1,22 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 10s
+  shutdown_timeout: 10s
+
+logger:
+  level: info
+  output: stdout
+  format: json
+  file: logs/api.log
+
+database:
+  host: localhost
+  port: 5432
+  user: marketmind
+  # Set MARKETMIND_DATABASE__PASSWORD in .env or the process environment.
+  password: ""
+  database: marketmind
+  sslmode: disable
+  max_conns: 10
+  connect_timeout: 5s
