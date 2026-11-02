@@ -1,0 +1,23 @@
+name: marketmind
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${MARKETMIND_DATABASE__USER:-marketmind}
+      POSTGRES_PASSWORD: ${MARKETMIND_DATABASE__PASSWORD:?Set MARKETMIND_DATABASE__PASSWORD in backend/.env}
+      POSTGRES_DB: ${MARKETMIND_DATABASE__DATABASE:-marketmind}
+    ports:
+      - "127.0.0.1:${MARKETMIND_DEPLOY__POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:

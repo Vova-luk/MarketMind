@@ -1,0 +1,40 @@
+name: marketmind
+
+include:
+  - compose.postgres.yaml
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      MARKETMIND_SERVER__HOST: 0.0.0.0
+      MARKETMIND_SERVER__PORT: "8080"
+      MARKETMIND_DATABASE__HOST: postgres
+      MARKETMIND_DATABASE__PORT: "5432"
+      MARKETMIND_DATABASE__USER: ${MARKETMIND_DATABASE__USER:-marketmind}
+      MARKETMIND_DATABASE__PASSWORD: ${MARKETMIND_DATABASE__PASSWORD:?Set MARKETMIND_DATABASE__PASSWORD in backend/.env}
+      MARKETMIND_DATABASE__DATABASE: ${MARKETMIND_DATABASE__DATABASE:-marketmind}
+      MARKETMIND_LOGGER__FILE: /app/logs/api.log
+    ports:
+      - "${MARKETMIND_SERVER__PORT:-8080}:8080"
+    volumes:
+      - ../services/api/config/config.yaml:/app/config/config.yaml:ro
+      - api_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5m
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+
+volumes:
+  api_logs:
