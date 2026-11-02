@@ -1,4 +1,3 @@
-
 name: MarketMind CI
 
 on:
@@ -19,26 +18,24 @@ jobs:
   ci:
     name: CI checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: backend/services
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check repository structure
-        run: |
-          echo "MarketMind CI started"
-          echo "Repository structure:"
-          ls -la
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/services/go.mod
+          cache-dependency-path: backend/services/go.sum
 
-      - name: Backend check
-        run: |
-          echo "Checking backend services..."
-          echo "Backend CI will be configured later"
+      - name: Check Go modules
+        run: go mod tidy -diff
 
-      - name: Frontend check
-        run: |
-          echo "Checking frontend..."
-          echo "Frontend CI will be configured later"
-
-      - name: Finish
-        run: echo "MarketMind CI completed"
+      - name: Run Go tests
+        run: go test -race -count=1 ./...
