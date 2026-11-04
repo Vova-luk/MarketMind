@@ -104,10 +104,52 @@ func TestLoadRejectsInvalidFiles(t *testing.T) {
 	}
 }
 
+func writePasswordConfig(t *testing.T, passwordLine string) string {
+	t.Helper()
+	data := `server:
+  host: 127.0.0.1
+  port: 8182
+  read_timeout: 5s
+  write_timeout: 10s
+  shutdown_timeout: 10s
+
+database:
+  host: localhost
+  port: 5432
+  name: marketmind
+  user: postgres
+` + passwordLine
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestMissingPasswordIsNotAccepted(t *testing.T) {
+	for _, tc := range []struct{ name, passwordLine string }{
+		{"omitted", ""},
+		{"empty", "  password: \"\"\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			path := writePasswordConfig(t, tc.passwordLine)
+			_, err := Load(path)
+			if err == nil || !strings.Contains(err.Error(), "password") {
+				t.Fatal("missing password should be reported")
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsPasswordFromYAML(t *testing.T) {
 	clearConfigEnv(t)
-	_, err := Load("../../config/config.yaml")
-	if err == nil || !strings.Contains(err.Error(), "password") {
-		t.Fatal("missing password should be reported")
+	path := writePasswordConfig(t, "  password: yaml-test-password\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DB.Password != "yaml-test-password" {
+		t.Fatal("password from YAML was not loaded")
 	}
 }
