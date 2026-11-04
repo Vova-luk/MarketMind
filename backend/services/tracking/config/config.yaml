@@ -1,0 +1,21 @@
+server:
+ host: "0.0.0.0"
+ port: 8182
+ read_timeout: 5s
+ write_timeout: 10s
+ shutdown_timeout: 10s
+
+database:
+  host: localhost
+  port: 5432
+  name: marketmind
+  user: postgres
+  password: "super_secret_key"
+  connect_timeout: 5s
+
+kafka:
+  brokers:
+    - localhost:9092
+  consumer_group: marketmind-tracking
+  input_topic: Price-Checked-Topic
+  output_topic: Price-Changed-Topic
