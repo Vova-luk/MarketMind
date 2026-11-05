@@ -2,6 +2,7 @@ name: marketmind
 
 include:
   - compose.postgres.yaml
+  - compose.kafka.yaml
 
 services:
   api:
