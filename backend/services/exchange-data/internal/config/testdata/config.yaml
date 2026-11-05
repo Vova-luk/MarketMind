@@ -1,0 +1,31 @@
+server:
+  host: "0.0.0.0"
+  port: 8184
+  read_timeout: 5s
+  write_timeout: 10s
+  shutdown_timeout: 10s
+
+# Settings for the future gRPC adapter; it is not started by the scaffold yet.
+grpc:
+  host: "0.0.0.0"
+  port: 9090
+  shutdown_timeout: 10s
+
+kafka:
+  brokers:
+    - localhost:9092
+  output_topic: Price-Checked-Topic
+
+scheduler:
+  interval: 10s
+
+exchanges:
+  binance:
+    base_url: https://api.binance.com
+    request_timeout: 5s
+  bybit:
+    base_url: https://api.bybit.com
+    request_timeout: 5s
+  okx:
+    base_url: https://www.okx.com
+    request_timeout: 5s
