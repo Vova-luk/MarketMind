@@ -56,7 +56,6 @@ const INITIAL_COINS = [
     exchange: 'OKX',
     isWatched: true,
     alerts: [],
-    
   },
   {
     id: 'btw',
@@ -73,7 +72,7 @@ const INITIAL_COINS = [
 
 export default function App() {
   const [coins, setCoins] = useState(INITIAL_COINS);
-  const [activeSheet, setActiveSheet] = useState(null);
+  const [activeSheet, setActiveSheet] = useState(null); 
   const [selectedCoinId, setSelectedCoinId] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -224,7 +223,6 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white relative flex flex-col font-sans shadow-xl overflow-hidden">
-      {/* Шапка */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <span className="font-bold text-xl italic tracking-tight text-black">
