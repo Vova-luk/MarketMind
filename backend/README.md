@@ -27,3 +27,10 @@ docker compose --env-file .env -f deploy/compose.postgres.yaml up -d --wait
 cd services
 go run ./api/cmd -config ./api/config/config.yaml -env-file ../.env
 ```
+
+## Миграции базы данных
+
+API автоматически применяет миграции после подключения к PostgreSQL и до
+запуска HTTP-сервера. SQL общей схемы хранятся в `services/utils/migrations`.
+Формат, ручной откат и полный цикл проверки описаны в
+[инструкции по миграциям](services/utils/migrations/README.md).
