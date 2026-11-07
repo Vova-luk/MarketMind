@@ -46,7 +46,7 @@ func NewBinanceClient(cfg config.ExchangeConfig, logger *slog.Logger) *BinanceCl
 	}
 }
 
-func (c *BinanceClient) GetActualCryptocurrencyPriceFromBinance(ctx context.Context, symbols []string) (*domain.Market, error) {
+func (c *BinanceClient) GetPrices(ctx context.Context, symbols []string) (*domain.Market, error) {
 	if len(symbols) == 0 {
 		return nil, fmt.Errorf("symbols must not be empty")
 	}

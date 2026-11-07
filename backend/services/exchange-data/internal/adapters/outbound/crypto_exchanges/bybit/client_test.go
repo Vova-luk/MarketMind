@@ -56,7 +56,7 @@ func TestQuotesAreFilteredAndMapped(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: body, Request: r}, nil
 	})
 	before := time.Now()
-	market, err := client.GetActualCryptocurrencyPriceFromBybit(ctx, []string{" BTCUSDT ", "", "ETHUSDT", "MISSING", "BTCUSDT"})
+	market, err := client.GetPrices(ctx, []string{" BTCUSDT ", "", "ETHUSDT", "MISSING", "BTCUSDT"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestQuoteResponseFailures(t *testing.T) {
 				calls++
 				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: body, Request: r}, nil
 			})
-			market, err := client.GetActualCryptocurrencyPriceFromBybit(context.Background(), []string{"BTCUSDT"})
+			market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 			if tt.wantError {
 				if err == nil || market != nil {
 					t.Fatalf("market=%+v, error=%v", market, err)
@@ -135,7 +135,7 @@ func TestInvalidPricesCarryPerQuoteErrors(t *testing.T) {
 			client.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(encoded)), Request: r}, nil
 			})
-			market, err := client.GetActualCryptocurrencyPriceFromBybit(context.Background(), []string{"BTCUSDT"})
+			market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -150,7 +150,7 @@ func TestEmptySymbolsDoNotSendRequest(t *testing.T) {
 	for _, symbols := range [][]string{nil, {}, {"", " \t"}} {
 		client := testClient()
 		client.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { t.Fatal("unexpected HTTP request"); return nil, nil })
-		if market, err := client.GetActualCryptocurrencyPriceFromBybit(context.Background(), symbols); err == nil || market != nil {
+		if market, err := client.GetPrices(context.Background(), symbols); err == nil || market != nil {
 			t.Errorf("market=%+v, error=%v", market, err)
 		}
 	}
@@ -181,7 +181,7 @@ func TestHTTPRetryPolicy(t *testing.T) {
 				previous = &trackedBody{Reader: strings.NewReader(data)}
 				return &http.Response{StatusCode: status, Header: make(http.Header), Body: previous, Request: r}, nil
 			})
-			market, err := client.GetActualCryptocurrencyPriceFromBybit(context.Background(), []string{"BTCUSDT"})
+			market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 			if (err == nil) != tt.success || (market != nil) != tt.success || calls != tt.calls || !previous.closed {
 				t.Fatalf("market=%+v, error=%v, calls=%d, closed=%v", market, err, calls, previous.closed)
 			}
@@ -214,7 +214,7 @@ func TestTransportFailurePolicy(t *testing.T) {
 			client := testClient()
 			calls := 0
 			client.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, tt.err })
-			market, err := client.GetActualCryptocurrencyPriceFromBybit(context.Background(), []string{"BTCUSDT"})
+			market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 			if market != nil || !errors.Is(err, tt.err) || calls != tt.calls {
 				t.Fatalf("market=%+v, error=%v, calls=%d", market, err, calls)
 			}
@@ -234,7 +234,7 @@ func TestCancellationDuringRetryWait(t *testing.T) {
 	client.logger = slog.New(slog.NewTextHandler(cancelWriter(func(p []byte) (int, error) { cancel(); return len(p), nil }), nil))
 	calls := 0
 	client.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, timeoutError{} })
-	market, err := client.GetActualCryptocurrencyPriceFromBybit(ctx, []string{"BTCUSDT"})
+	market, err := client.GetPrices(ctx, []string{"BTCUSDT"})
 	if market != nil || !errors.Is(err, context.Canceled) || calls != 1 {
 		t.Fatalf("market=%+v, error=%v, calls=%d", market, err, calls)
 	}
