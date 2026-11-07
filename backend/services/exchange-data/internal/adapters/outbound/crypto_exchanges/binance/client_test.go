@@ -93,7 +93,7 @@ func TestGetActualCryptocurrencyPrice(t *testing.T) {
 				}
 			})
 			before := time.Now()
-			market, err := client.GetActualCryptocurrencyPrice(ctx, tt.symbols)
+			market, err := client.GetActualCryptocurrencyPriceFromBinance(ctx, tt.symbols)
 			after := time.Now()
 			if err != nil {
 				t.Fatal(err)
@@ -130,7 +130,7 @@ func TestGetActualCryptocurrencyPriceRejectsEmptySymbols(t *testing.T) {
 			t.Fatal("empty symbols must not cause an HTTP request")
 			return nil, nil
 		})
-		market, err := client.GetActualCryptocurrencyPrice(context.Background(), symbols)
+		market, err := client.GetActualCryptocurrencyPriceFromBinance(context.Background(), symbols)
 		if err == nil || market != nil {
 			t.Errorf("symbols=%q: got market=%+v, error=%v", symbols, market, err)
 		}
@@ -157,7 +157,7 @@ func TestGetActualCryptocurrencyPriceResponseErrors(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client, body := stubClient(t, tt.status, tt.body, nil)
-			market, err := client.GetActualCryptocurrencyPrice(context.Background(), tt.symbols)
+			market, err := client.GetActualCryptocurrencyPriceFromBinance(context.Background(), tt.symbols)
 			if err == nil || market != nil {
 				t.Errorf("expected request failure, got market=%+v, error=%v", market, err)
 			}
@@ -179,7 +179,7 @@ func TestGetActualCryptocurrencyPriceKeepsPartialResults(t *testing.T) {
 				t.Fatal(err)
 			}
 			client, _ := stubClient(t, 200, string(data), nil)
-			market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT", "ETHUSDT"})
+			market, err := client.GetActualCryptocurrencyPriceFromBinance(context.Background(), []string{"BTCUSDT", "ETHUSDT"})
 			if err != nil {
 				t.Fatalf("invalid quote must not discard successful quotes: %v", err)
 			}
@@ -200,7 +200,7 @@ func TestGetActualCryptocurrencyPriceKeepsPartialResults(t *testing.T) {
 func TestGetActualCryptocurrencyPriceMarksIncompleteSingleQuote(t *testing.T) {
 	for _, body := range []string{`{}`, `null`, `{"price":"65000.50"}`, `{"symbol":"BTCUSDT"}`} {
 		client, _ := stubClient(t, 200, body, nil)
-		market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"})
+		market, err := client.GetActualCryptocurrencyPriceFromBinance(context.Background(), []string{"BTCUSDT"})
 		if err != nil {
 			t.Fatalf("body=%s: expected per-quote error, got %v", body, err)
 		}
@@ -220,7 +220,7 @@ func TestGetActualCryptocurrencyPriceTransportError(t *testing.T) {
 	client.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return nil, want
 	})
-	market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"})
+	market, err := client.GetActualCryptocurrencyPriceFromBinance(context.Background(), []string{"BTCUSDT"})
 	if market != nil || !errors.Is(err, want) {
 		t.Fatalf("expected wrapped transport error, got market=%+v, error=%v", market, err)
 	}
@@ -239,7 +239,7 @@ func TestGetActualCryptocurrencyPriceCancellation(t *testing.T) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})
-	market, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"})
+	market, err := client.GetActualCryptocurrencyPriceFromBinance(ctx, []string{"BTCUSDT"})
 	if market != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation, got market=%+v, error=%v", market, err)
 	}
@@ -255,7 +255,7 @@ func TestBinanceClientUsesConfiguredAddress(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"symbol":"BTCUSDT","price":"1.00"}`)), Request: r}, nil
 	})
-	if _, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"}); err != nil {
+	if _, err := client.GetActualCryptocurrencyPriceFromBinance(context.Background(), []string{"BTCUSDT"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -270,7 +270,7 @@ func TestBinanceClientUsesConfiguredTimeout(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	market, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"})
+	market, err := client.GetActualCryptocurrencyPriceFromBinance(ctx, []string{"BTCUSDT"})
 	if market != nil || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected timeout, got market=%+v, error=%v", market, err)
 	}
