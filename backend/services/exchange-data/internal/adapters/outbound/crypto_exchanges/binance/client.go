@@ -3,10 +3,14 @@ package binance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance/dto"
+	"marketmind/exchange-data/internal/config"
 	"marketmind/exchange-data/internal/domain"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -17,14 +21,28 @@ import (
 const exchangeName = "Binance"
 
 type BinanceClient struct {
+	baseURL     string
+	retryDelay  time.Duration
+	maxAttempts int
+
 	client *http.Client
+	logger *slog.Logger
 }
 
-func NewBinanceClient() *BinanceClient {
+func NewBinanceClient(cfg config.ExchangeConfig, logger *slog.Logger) *BinanceClient {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &BinanceClient{
-		&http.Client{
-			Timeout: time.Second * 10,
+		client: &http.Client{
+			Timeout: cfg.Timeout,
 		},
+		baseURL:     cfg.BaseURL,
+		retryDelay:  cfg.RetryDelay,
+		maxAttempts: cfg.MaxAttempts,
+
+		logger: logger,
 	}
 }
 
@@ -61,23 +79,19 @@ func (c *BinanceClient) GetActualCryptocurrencyPrice(ctx context.Context, symbol
 		params.Set("symbols", string(data))
 	}
 
-	URL := "https://data-api.binance.vision/api/v3/ticker/price?" + params.Encode()
+	URL := c.baseURL + "/api/v3/ticker/price?" + params.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.client.Do(req)
+	resp, err := c.doWithRetry(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request to Binance: %w", err)
+		return nil, err
 	}
 
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Binance returned HTTP %d", resp.StatusCode)
-	}
 
 	var responsePrices []dto.BinancePrice
 	decoder := json.NewDecoder(resp.Body)
@@ -116,7 +130,7 @@ func (c *BinanceClient) GetActualCryptocurrencyPrice(ctx context.Context, symbol
 		}
 	}
 
-	market := &domain.Market{
+	market := domain.Market{
 		Exchange:       exchangeName,
 		Cryptocurrency: cryptocurrencies,
 		ReceivedAt:     time.Now().UTC(),
@@ -126,7 +140,81 @@ func (c *BinanceClient) GetActualCryptocurrencyPrice(ctx context.Context, symbol
 		return nil, fmt.Errorf("service didn't find any prices")
 	}
 
-	return market, nil
+	return &market, nil
+}
+
+func (c *BinanceClient) doWithRetry(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	if c.maxAttempts < 1 {
+		return nil, fmt.Errorf("Binance max_attempts must be at least 1")
+	}
+	var lastErr error
+
+	for attempt := 1; attempt <= c.maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		resp, err := c.client.Do(req)
+
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
+			var netErr net.Error
+			if !errors.As(err, &netErr) || !netErr.Timeout() {
+				return nil, fmt.Errorf("send Binance request: %w", err)
+			}
+
+			lastErr = err
+		} else {
+			switch resp.StatusCode {
+			case http.StatusOK:
+				return resp, nil
+
+			case http.StatusBadGateway,
+				http.StatusServiceUnavailable,
+				http.StatusGatewayTimeout:
+				lastErr = fmt.Errorf(
+					"Binance returned HTTP %d", resp.StatusCode,
+				)
+				resp.Body.Close()
+
+			default:
+				resp.Body.Close()
+				return nil, fmt.Errorf(
+					"Binance returned HTTP %d", resp.StatusCode,
+				)
+			}
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if attempt == c.maxAttempts {
+			break
+		}
+
+		c.logger.WarnContext(ctx, "Binance request failed; retrying",
+			slog.Int("attempt", attempt),
+			slog.Duration("retry_delay", c.retryDelay),
+			slog.Any("error", lastErr),
+		)
+
+		timer := time.NewTimer(c.retryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+
+	return nil, fmt.Errorf(
+		"Binance request failed after %d attempts: %w",
+		c.maxAttempts, lastErr,
+	)
 }
 
 func validatePrice(value string) error {

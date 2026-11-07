@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"marketmind/exchange-data/internal/config"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -32,7 +33,11 @@ func (b *trackedBody) Close() error {
 func stubClient(t *testing.T, status int, body string, check func(*http.Request)) (*BinanceClient, *trackedBody) {
 	t.Helper()
 	responseBody := &trackedBody{Reader: strings.NewReader(body)}
-	client := NewBinanceClient()
+	client := NewBinanceClient(config.ExchangeConfig{
+		BaseURL:     "https://data-api.binance.vision",
+		Timeout:     time.Second,
+		MaxAttempts: 1,
+	}, nil)
 	client.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if check != nil {
 			check(r)
@@ -116,7 +121,11 @@ func TestGetActualCryptocurrencyPrice(t *testing.T) {
 
 func TestGetActualCryptocurrencyPriceRejectsEmptySymbols(t *testing.T) {
 	for _, symbols := range [][]string{nil, {}, {""}, {" ", "\t\n"}} {
-		client := NewBinanceClient()
+		client := NewBinanceClient(config.ExchangeConfig{
+			BaseURL:     "https://data-api.binance.vision",
+			Timeout:     time.Second,
+			MaxAttempts: 1,
+		}, nil)
 		client.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Fatal("empty symbols must not cause an HTTP request")
 			return nil, nil
@@ -203,7 +212,11 @@ func TestGetActualCryptocurrencyPriceMarksIncompleteSingleQuote(t *testing.T) {
 
 func TestGetActualCryptocurrencyPriceTransportError(t *testing.T) {
 	want := errors.New("connection failed")
-	client := NewBinanceClient()
+	client := NewBinanceClient(config.ExchangeConfig{
+		BaseURL:     "https://data-api.binance.vision",
+		Timeout:     time.Second,
+		MaxAttempts: 1,
+	}, nil)
 	client.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return nil, want
 	})
@@ -216,7 +229,11 @@ func TestGetActualCryptocurrencyPriceTransportError(t *testing.T) {
 func TestGetActualCryptocurrencyPriceCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	client := NewBinanceClient()
+	client := NewBinanceClient(config.ExchangeConfig{
+		BaseURL:     "https://data-api.binance.vision",
+		Timeout:     time.Second,
+		MaxAttempts: 1,
+	}, nil)
 	client.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		cancel()
 		<-r.Context().Done()
@@ -225,5 +242,39 @@ func TestGetActualCryptocurrencyPriceCancellation(t *testing.T) {
 	market, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"})
 	if market != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation, got market=%+v, error=%v", market, err)
+	}
+}
+
+func TestBinanceClientUsesConfiguredAddress(t *testing.T) {
+	client := NewBinanceClient(config.ExchangeConfig{
+		BaseURL: "https://binance.example", Timeout: time.Second, MaxAttempts: 1,
+	}, nil)
+	client.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "binance.example" || r.URL.Path != "/api/v3/ticker/price" {
+			t.Errorf("configured base URL ignored: %s", r.URL)
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"symbol":"BTCUSDT","price":"1.00"}`)), Request: r}, nil
+	})
+	if _, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBinanceClientUsesConfiguredTimeout(t *testing.T) {
+	client := NewBinanceClient(config.ExchangeConfig{
+		BaseURL: "https://binance.example", Timeout: 10 * time.Millisecond, MaxAttempts: 1,
+	}, nil)
+	client.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	market, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"})
+	if market != nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected timeout, got market=%+v, error=%v", market, err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("caller deadline expired instead of client timeout")
 	}
 }

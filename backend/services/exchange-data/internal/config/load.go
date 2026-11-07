@@ -32,9 +32,9 @@ func Load(path string, envPaths ...string) (*Config, error) {
 		Kafka:     KafkaConfig{Brokers: []string{"localhost:9092"}, OutputTopic: "Price-Checked-Topic"},
 		Scheduler: SchedulerConfig{Interval: 10 * time.Second},
 		Exchanges: ExchangesConfig{
-			Binance: ExchangeConfig{BaseURL: "https://api.binance.com", RequestTimeout: 5 * time.Second},
-			Bybit:   ExchangeConfig{BaseURL: "https://api.bybit.com", RequestTimeout: 5 * time.Second},
-			OKX:     ExchangeConfig{BaseURL: "https://www.okx.com", RequestTimeout: 5 * time.Second},
+			Binance: ExchangeConfig{BaseURL: "https://data-api.binance.vision", Timeout: 5 * time.Second, RetryDelay: 3 * time.Second, MaxAttempts: 3},
+			Bybit:   ExchangeConfig{BaseURL: "https://api.bybit.com", Timeout: 5 * time.Second, MaxAttempts: 1},
+			OKX:     ExchangeConfig{BaseURL: "https://www.okx.com", Timeout: 5 * time.Second, MaxAttempts: 1},
 		},
 	}
 	decoder := yaml.NewDecoder(file)
@@ -73,13 +73,14 @@ func (c *Config) applyEnv() error {
 	}{
 		{"EXCHANGE_DATA_SERVER_PORT", &c.Server.Port},
 		{"EXCHANGE_DATA_GRPC_PORT", &c.GRPC.Port},
+		{"EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS", &c.Exchanges.Binance.MaxAttempts},
 	} {
 		if value, ok := os.LookupEnv(field.name); ok {
-			port, err := strconv.Atoi(value)
+			number, err := strconv.Atoi(value)
 			if err != nil {
 				return fmt.Errorf("%s must be an integer", field.name)
 			}
-			*field.target = port
+			*field.target = number
 		}
 	}
 	for _, field := range []struct {
@@ -91,9 +92,10 @@ func (c *Config) applyEnv() error {
 		{"EXCHANGE_DATA_SERVER_SHUTDOWN_TIMEOUT", &c.Server.ShutdownTimeout},
 		{"EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT", &c.GRPC.ShutdownTimeout},
 		{"EXCHANGE_DATA_POLL_INTERVAL", &c.Scheduler.Interval},
-		{"EXCHANGE_DATA_BINANCE_TIMEOUT", &c.Exchanges.Binance.RequestTimeout},
-		{"EXCHANGE_DATA_BYBIT_TIMEOUT", &c.Exchanges.Bybit.RequestTimeout},
-		{"EXCHANGE_DATA_OKX_TIMEOUT", &c.Exchanges.OKX.RequestTimeout},
+		{"EXCHANGE_DATA_BINANCE_TIMEOUT", &c.Exchanges.Binance.Timeout},
+		{"EXCHANGE_DATA_BINANCE_RETRY_DELAY", &c.Exchanges.Binance.RetryDelay},
+		{"EXCHANGE_DATA_BYBIT_TIMEOUT", &c.Exchanges.Bybit.Timeout},
+		{"EXCHANGE_DATA_OKX_TIMEOUT", &c.Exchanges.OKX.Timeout},
 	} {
 		if value, ok := os.LookupEnv(field.name); ok {
 			duration, err := time.ParseDuration(value)
