@@ -21,8 +21,10 @@ scheduler:
 
 exchanges:
   binance:
-    base_url: https://api.binance.com
+    base_url: https://data-api.binance.vision
     request_timeout: 5s
+    retry_delay: 2s
+    max_attempts: 4
   bybit:
     base_url: https://api.bybit.com
     request_timeout: 5s

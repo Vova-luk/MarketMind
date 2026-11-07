@@ -5,12 +5,14 @@ import (
 	"log/slog"
 	"net/http"
 
+	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance"
 	"marketmind/exchange-data/internal/config"
 	"marketmind/exchange-data/internal/server"
 )
 
 type Application struct {
-	server *server.Server
+	server        *server.Server
+	binanceClient *binance.BinanceClient
 }
 
 func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
@@ -26,7 +28,10 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Application{server: srv}, nil
+	return &Application{
+		server:        srv,
+		binanceClient: binance.NewBinanceClient(cfg.Exchanges.Binance, logger),
+	}, nil
 }
 
 func (a *Application) Run(ctx context.Context) error {

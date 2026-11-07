@@ -45,8 +45,10 @@ type ExchangesConfig struct {
 }
 
 type ExchangeConfig struct {
-	BaseURL        string        `yaml:"base_url"`
-	RequestTimeout time.Duration `yaml:"request_timeout"`
+	BaseURL     string        `yaml:"base_url"`
+	Timeout     time.Duration `yaml:"request_timeout"`
+	RetryDelay  time.Duration `yaml:"retry_delay"`
+	MaxAttempts int           `yaml:"max_attempts"`
 }
 
 func (c Config) Validate() error {
@@ -88,7 +90,13 @@ func (c Config) Validate() error {
 		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return fmt.Errorf("%s base_url must be an absolute HTTP or HTTPS URL", exchange.name)
 		}
-		if exchange.cfg.RequestTimeout <= 0 {
+		if exchange.cfg.RetryDelay < 0 {
+			return fmt.Errorf("%s retry_delay must not be negative", exchange.name)
+		}
+		if exchange.cfg.MaxAttempts < 1 {
+			return fmt.Errorf("%s max_attempts must be at least 1", exchange.name)
+		}
+		if exchange.cfg.Timeout <= 0 {
 			return fmt.Errorf("%s request_timeout must be positive", exchange.name)
 		}
 	}

@@ -15,6 +15,7 @@ func clearExchangeEnv(t *testing.T) {
 		"EXCHANGE_DATA_GRPC_HOST", "EXCHANGE_DATA_GRPC_PORT", "EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT",
 		"EXCHANGE_DATA_KAFKA_BROKERS", "EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "EXCHANGE_DATA_POLL_INTERVAL",
 		"EXCHANGE_DATA_BINANCE_BASE_URL", "EXCHANGE_DATA_BINANCE_TIMEOUT",
+		"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS",
 		"EXCHANGE_DATA_BYBIT_BASE_URL", "EXCHANGE_DATA_BYBIT_TIMEOUT",
 		"EXCHANGE_DATA_OKX_BASE_URL", "EXCHANGE_DATA_OKX_TIMEOUT",
 	} {
@@ -37,7 +38,7 @@ func TestLoadConfigWithoutExternalConnections(t *testing.T) {
 	if cfg.Kafka.OutputTopic != "Price-Checked-Topic" || len(cfg.Kafka.Brokers) != 1 {
 		t.Fatal("Kafka producer settings were not decoded")
 	}
-	if cfg.Scheduler.Interval != 10*time.Second || cfg.Exchanges.Binance.BaseURL != "https://api.binance.com" || cfg.Exchanges.Bybit.RequestTimeout != 5*time.Second || cfg.Exchanges.OKX.BaseURL != "https://www.okx.com" {
+	if cfg.Scheduler.Interval != 10*time.Second || cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Bybit.Timeout != 5*time.Second || cfg.Exchanges.OKX.BaseURL != "https://www.okx.com" {
 		t.Fatal("scheduler or exchange settings were not decoded")
 	}
 }
@@ -66,7 +67,7 @@ func TestLoadDotenvAndProcessPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Server.Port != 8384 || cfg.GRPC.Port != 9190 || cfg.Scheduler.Interval != 15*time.Second || cfg.Exchanges.OKX.RequestTimeout != 8*time.Second {
+	if cfg.Server.Port != 8384 || cfg.GRPC.Port != 9190 || cfg.Scheduler.Interval != 15*time.Second || cfg.Exchanges.OKX.Timeout != 8*time.Second {
 		t.Fatal("expected process > dotenv > YAML precedence")
 	}
 	if len(cfg.Kafka.Brokers) != 2 || cfg.Kafka.Brokers[1] != "broker-b:9092" {
@@ -86,6 +87,12 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", ""},
 		{"EXCHANGE_DATA_POLL_INTERVAL", "0s"},
 		{"EXCHANGE_DATA_BINANCE_BASE_URL", "invalid"},
+		{"EXCHANGE_DATA_BINANCE_TIMEOUT", "0s"},
+		{"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "-1s"},
+		{"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "invalid"},
+		{"EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS", "0"},
+		{"EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS", "-1"},
+		{"EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS", "invalid"},
 		{"EXCHANGE_DATA_BYBIT_BASE_URL", "invalid"},
 		{"EXCHANGE_DATA_OKX_TIMEOUT", "0s"},
 	} {
@@ -118,5 +125,41 @@ func TestLoadRejectsInvalidFiles(t *testing.T) {
 		if _, err := Load(path); err == nil {
 			t.Fatal("malformed YAML or unexpected service settings were accepted")
 		}
+	}
+}
+
+func TestBinanceSettingsPrecedence(t *testing.T) {
+	clearExchangeEnv(t)
+	cfg, err := Load("testdata/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Exchanges.Binance.Timeout != 5*time.Second || cfg.Exchanges.Binance.RetryDelay != 2*time.Second || cfg.Exchanges.Binance.MaxAttempts != 4 {
+		t.Fatalf("Binance YAML settings not loaded: %+v", cfg.Exchanges.Binance)
+	}
+	path := filepath.Join(t.TempDir(), ".env")
+	data := "EXCHANGE_DATA_BINANCE_BASE_URL=https://binance.example\nEXCHANGE_DATA_BINANCE_TIMEOUT=7s\nEXCHANGE_DATA_BINANCE_RETRY_DELAY=4s\nEXCHANGE_DATA_BINANCE_MAX_ATTEMPTS=5\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS", "2")
+	cfg, err = Load("testdata/config.yaml", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.Exchanges.Binance
+	if got.BaseURL != "https://binance.example" || got.Timeout != 7*time.Second || got.RetryDelay != 4*time.Second || got.MaxAttempts != 2 {
+		t.Fatalf("expected process > dotenv > YAML: %+v", got)
+	}
+}
+
+func TestProjectConfigLoads(t *testing.T) {
+	clearExchangeEnv(t)
+	cfg, err := Load("../../config/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Binance.RetryDelay != 3*time.Second || cfg.Exchanges.Binance.MaxAttempts != 3 {
+		t.Fatalf("unexpected project Binance settings: %+v", cfg.Exchanges.Binance)
 	}
 }
