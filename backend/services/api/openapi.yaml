@@ -1,0 +1,816 @@
+openapi: 3.1.0
+info:
+  title: MarketMind Mini App API
+  version: 1.0.0-draft
+  description: |
+    Каждый запрос содержит Authorization: tma <Telegram.WebApp.initData>.
+    При каждом открытии клиент сначала вызывает POST /users/me.
+    Остальные операции требуют регистрации (иначе 404 USER_NOT_REGISTERED).
+    Пользователь определяется только по проверенному initData.
+    Все ответы персональные: Cache-Control: no-store.
+
+    Единица отслеживания — market (монета + биржа). В текущем каталоге
+    все цены в USDT; конвертации валют нет. BIGINT и десятичные значения — строки.
+    Поиск возвращает exchange_id и external_id для добавления, отслеживаемое — subscription_id
+    для открытия карточки, удаления подписки и управления алертами.
+
+    В запланированных операциях неизвестные поля JSON/query, повторяющиеся
+    query-параметры и неверные значения отклоняются с 400 VALIDATION_ERROR.
+    Для JSON-тела нужен Content-Type: application/json (иначе 415).
+    POST /users/me не читает тело запроса.
+
+    Пустая коллекция — items: []. Цена — результат успешного запроса текущей
+    котировки через Exchange-Data; при недоступности price: null. Ошибка отдельной
+    биржи не скрывает список и сохранённые алерты. Старое markets.price без времени
+    обновления не выдаётся за текущую цену. Метаданные свежести в ответ не входят.
+    Лимиты подписок и активных алертов задаются конфигурацией сервиса.
+servers:
+- {url: /api/v1}
+tags:
+- name: Users
+  description: Инициализация пользователя Mini App.
+- name: Markets
+  description: Каталог рынков и бирж.
+- name: Subscriptions
+  description: Персональный список отслеживания и карточка рынка.
+- name: Alerts
+  description: Условия уведомлений для отслеживаемого рынка.
+security:
+- TelegramInitData: []
+paths:
+  /users/me:
+    post:
+      tags:
+      - Users
+      x-implementation-status: implemented
+      operationId: registerCurrentUser
+      summary: Зарегистрировать пользователя при открытии Mini App
+      description: |
+        Идемпотентная инициализация без тела запроса. Первый и повторные вызовы
+        возвращают 200 и один и тот же Telegram ID. Существующие подписки, алерты
+        и настройки уведомлений сохраняются. Флаг is_new клиенту для этого сценария не нужен.
+      responses:
+        '200':
+          description: Пользователь зарегистрирован или уже существует.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+              example: {telegram_user_id: '123456789'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /exchanges:
+    get:
+      tags:
+      - Markets
+      x-implementation-status: planned
+      operationId: listExchanges
+      summary: Получить активные биржи для фильтра
+      responses:
+        '200':
+          description: Активные биржи в порядке названия. Если их нет, items будет пустым массивом.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/Exchange'}
+              example:
+                items:
+                - {id: 1, name: Binance}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /markets:
+    get:
+      tags:
+      - Markets
+      x-implementation-status: planned
+      operationId: searchMarkets
+      summary: Найти рынки для выпадающего списка
+      description: |
+        API вызывает будущую ручку поиска Exchange-Data для выбранной биржи.
+        Поиск охватывает все доступные через неё spot-инструменты с USDT,
+        независимо от их наличия в нашей БД. Локальный список монет не ограничивает выдачу.
+        Ручка поиска Exchange-Data ещё не реализована; её внутренний контракт проектируется отдельно.
+        Exchange-Data сразу выполняет оба сценария поиска: eq и constraint.
+        Они возвращают единый список; режим поиска не передаётся ни клиентом,
+        ни API при обращении к Exchange-Data. API не делает два отдельных запроса.
+        Один инструмент включается в результат один раз, даже если найден обоими сценариями.
+        Пробелы по краям q удаляются; пустой q или его отсутствие возвращают каталог.
+        Порядок фиксирован: external_id ASC, лексикографически. GET ничего не создаёт в БД.
+        Ответ содержит exchange_id, external_id и имя монеты без названия биржи.
+        UI отправляет exchange_id и external_id в POST /subscriptions;
+        внутренние ID монеты и рынка для добавления не нужны.
+        Уже добавленные инструменты также присутствуют: повторное добавление безопасно.
+        Неизвестная/отключённая exchange_id — 404 EXCHANGE_NOT_FOUND.
+        Недоступность каталога — 503 MARKET_CATALOG_UNAVAILABLE, а не пустой список.
+        При изменении каталога между страницами снимок результатов не фиксируется.
+      parameters:
+      - name: q
+        in: query
+        description: Общая строка поиска для обоих сценариев Exchange-Data; пробелы по краям удаляются.
+        schema: {type: string, maxLength: 120}
+        example: Bitcoin
+      - name: exchange_id
+        in: query
+        required: true
+        description: Биржа, выбранная пользователем из GET /exchanges. Сначала выбирается биржа, затем монета.
+        schema: {$ref: '#/components/schemas/ExchangeId'}
+        example: 1
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+          default: 1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Страница результатов. При отсутствии совпадений items будет пустым массивом.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MarketPage'}
+              example:
+                items:
+                - {exchange_id: 1, external_id: BTCUSDT, name: Bitcoin}
+                next_page: null
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /subscriptions:
+    get:
+      tags:
+      - Subscriptions
+      x-implementation-status: planned
+      operationId: listSubscriptions
+      summary: Получить список отслеживаемых рынков
+      description: |
+        Все подписки текущего пользователя по subscription_id ASC, включая рынки
+        отключённых бирж (для них price: null). Без пагинации: размер ограничен лимитом.
+        Каждая строка содержит только subscription_id, name, exchange_name и price.
+      responses:
+        '200':
+          description: Список подписок в порядке добавления. Если подписок нет, items будет пустым массивом.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SubscriptionList'}
+              example:
+                items:
+                - subscription_id: '18'
+                  name: Bitcoin
+                  exchange_name: Binance
+                  price: '83781'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags:
+      - Subscriptions
+      x-implementation-status: planned
+      operationId: addSubscription
+      summary: Добавить рынок в отслеживаемое
+      description: |
+        Находит рынок по (exchange_id, external_id) и создаёт только подписку текущего
+        пользователя, если рынок уже есть. Если подписка тоже есть — 200 с прежним ID,
+        даже при отключённой бирже, исчерпанном лимите или недоступном каталоге/котировке.
+        Новая подписка требует активной биржи и места в лимите.
+
+        Если рынка ещё нет, сервер проверяет инструмент по поддерживаемому каталогу
+        Exchange-Data, получает доверенное name и начальную цену.
+        Неизвестный/неподдерживаемый инструмент — 404 MARKET_NOT_FOUND;
+        недоступный каталог — 503 MARKET_CATALOG_UNAVAILABLE; нет цены — 503 QUOTE_UNAVAILABLE.
+        В транзакции повторно проверяет рынок по (exchange_id, external_id).
+        Если рынок найден — использует его и связанную монету; иначе создаёт запись
+        монеты и рынка, сохраняя external_id. Затем создаёт подписку по (user_id, market_id).
+        Имена и внешние ID разных бирж не используются для склеивания монет.
+        Ошибка не оставляет частично созданные записи. Конкурентные запросы защищены
+        уникальными ключами; ID существующих объектов и их алерты сохраняются.
+
+        Начальная цена обязательна только для создания рынка из-за markets.price NOT NULL.
+        Для подписки на существующий рынок доступность котировки не обязательна;
+        при её отсутствии ответ содержит price: null. Клиент не передаёт name, цену,
+        внутренний cryptocurrency_id или market_id — сервер определяет их сам.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionCreate'
+            example: {exchange_id: 1, external_id: BTCUSDT}
+      responses:
+        '200':
+          description: Подписка уже существует.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+              example:
+                subscription_id: '18'
+                name: Bitcoin
+                exchange_name: Binance
+                price: '83781'
+        '201':
+          description: Создана новая подписка, независимо от того, существовали ли монета и рынок до запроса.
+          headers:
+            Location:
+              description: Путь к созданной подписке.
+              schema:
+                type: string
+                examples:
+                - /api/v1/subscriptions/18
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+              example:
+                subscription_id: '18'
+                name: Bitcoin
+                exchange_name: Binance
+                price: '83781'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /subscriptions/{subscription_id}:
+    parameters:
+    - {$ref: '#/components/parameters/SubscriptionId'}
+    get:
+      tags:
+      - Subscriptions
+      x-implementation-status: planned
+      operationId: getSubscription
+      summary: Получить карточку отслеживаемого рынка и список его алертов
+      responses:
+        '200':
+          description: Карточка с ценой и всеми активными/отключёнными алертами по alert_id ASC. При недоступности
+            цены price равен null.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SubscriptionDetail'}
+              example:
+                subscription_id: '18'
+                name: Bitcoin
+                exchange_name: Binance
+                price: '83781'
+                alerts:
+                - alert_id: '9'
+                  type: percent
+                  value: '5'
+                  target_price: '87970.05'
+                  is_active: true
+                - alert_id: '10'
+                  type: percent
+                  value: '-5'
+                  target_price: '79591.95'
+                  is_active: false
+                - alert_id: '11'
+                  type: price
+                  value: '83000'
+                  target_price: '83000'
+                  is_active: true
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags:
+      - Subscriptions
+      x-implementation-status: planned
+      operationId: deleteSubscription
+      summary: Удалить рынок из отслеживаемого вместе с его алертами
+      description: |
+        Атомарное каскадное удаление, включая отключённые алерты; работает и для отключённой биржи.
+        Повторное удаление возвращает 404 SUBSCRIPTION_NOT_FOUND.
+        Уже переданное в доставку уведомление может прийти после удаления.
+      responses:
+        '204':
+          description: Подписка и её алерты удалены.
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /subscriptions/{subscription_id}/alerts:
+    parameters:
+    - {$ref: '#/components/parameters/SubscriptionId'}
+    get:
+      tags:
+      - Alerts
+      x-implementation-status: planned
+      operationId: listSubscriptionAlerts
+      summary: Получить все алерты подписки
+      description: |
+        Тот же список, что в SubscriptionDetail.alerts: активные и отключённые,
+        по alert_id ASC. Нужен для обновления алертов без повторной загрузки карточки.
+        Без пагинации. Цена и доступность биржи не влияют на чтение сохранённых условий.
+      responses:
+        '200':
+          description: Список алертов; items пуст, если условия ещё не созданы.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertList'}
+              examples:
+                configured:
+                  summary: Рост, падение и конкретная цена; исходная цена при создании — 83781 USDT
+                  value:
+                    items:
+                    - alert_id: '9'
+                      type: percent
+                      value: '5'
+                      target_price: '87970.05'
+                      is_active: true
+                    - alert_id: '10'
+                      type: percent
+                      value: '-5'
+                      target_price: '79591.95'
+                      is_active: false
+                    - alert_id: '11'
+                      type: price
+                      value: '83000'
+                      target_price: '83000'
+                      is_active: true
+                empty:
+                  summary: Алерты ещё не созданы
+                  value:
+                    items: []
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags:
+      - Alerts
+      x-implementation-status: planned
+      operationId: createAlert
+      summary: Добавить активный алерт на рынок
+      description: |
+        Клиент передаёт только type и value. Сервер получает текущую цену через
+        Exchange-Data и сохраняет её в существующей alerts.reference_price.
+        Для price value — положительная целевая цена: target_price = value.
+        Цель выше reference_price означает рост, ниже — падение; равная цена запрещена (400).
+        Для percent value — знаковое изменение: "5" означает рост на 5%, "-5" — падение на 5%.
+        target_price = reference_price * (1 + value / 100).
+        Нулевой процент и падение на 100% или больше запрещены.
+        Целевая цена должна быть в (0; 500000]. Вычисления десятичные, без float64.
+        Направление не передаётся и не хранится отдельно; оно определяется по сохранённой
+        базовой цене и цели, а не по текущей цене при чтении.
+        Требуются активная биржа, текущая котировка и место в лимите активных алертов.
+        Создание само по себе не отправляет уведомление: отслеживаются последующие пересечения.
+        POST не идемпотентен: повтор создаёт ещё один алерт. После тайм-аута клиент
+        перечитывает список и не повторяет POST автоматически.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AlertCreate'}
+            examples:
+              price:
+                summary: Достичь 83000 USDT; при исходной цене 83781 это падение
+                value: {type: price, value: '83000'}
+              percentUp:
+                summary: Рост на 5% от цены при создании
+                value: {type: percent, value: '5'}
+              percentDown:
+                summary: Падение на 5% от цены при создании
+                value: {type: percent, value: '-5'}
+      responses:
+        '201':
+          description: Создан новый активный алерт.
+          headers:
+            Location:
+              description: Путь к созданному алерту; поддерживает PATCH и DELETE.
+              schema:
+                type: string
+                examples:
+                - /api/v1/subscriptions/18/alerts/9
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Alert'}
+              example:
+                alert_id: '9'
+                type: percent
+                value: '5'
+                target_price: '87970.05'
+                is_active: true
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /subscriptions/{subscription_id}/alerts/{alert_id}:
+    parameters:
+    - {$ref: '#/components/parameters/SubscriptionId'}
+    - name: alert_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Id'}
+    patch:
+      tags:
+      - Alerts
+      x-implementation-status: planned
+      operationId: updateAlert
+      summary: Изменить условие или включить и выключить алерт
+      description: |
+        Передаётся is_active и/или полный набор type, value. Пустое тело, null
+        и неполный набор условия — 400 VALIDATION_ERROR. Изменения атомарны.
+        Фактическое изменение type/value фиксирует новую reference_price и пересчитывает
+        цель и направление по правилам создания, даже если алерт отключён.
+        Неизменное условие (в том числе value "5" вместо "5.0") не меняет базу.
+        Изменение только is_active сохраняет исходную цену, цель и направление.
+        Для изменения условия и включения нужна активная биржа и текущая котировка;
+        при переходе false → true также проверяется лимит активных алертов.
+        Отключение работает без котировки и для отключённой биржи.
+        Повтор неизменного запроса возвращает 200 без сброса состояния отслеживания.
+        Изменение условия или включение задаёт новую начальную точку отслеживания,
+        но само по себе не отправляет уведомление.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AlertPatch'}
+            examples:
+              disable:
+                value: {is_active: false}
+              change:
+                value: {type: percent, value: '-5'}
+      responses:
+        '200':
+          description: Алерт после изменения.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Alert'}
+              example:
+                alert_id: '9'
+                type: percent
+                value: '5'
+                target_price: '87970.05'
+                is_active: false
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags:
+      - Alerts
+      x-implementation-status: planned
+      operationId: deleteAlert
+      summary: Удалить алерт
+      description: |
+        Доступно без котировки и на отключённой бирже. Повторное удаление — 404 ALERT_NOT_FOUND.
+        Уже переданное в доставку уведомление может прийти после удаления.
+      responses:
+        '204':
+          description: Алерт удалён.
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    TelegramInitData:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Полное значение заголовка tma <Telegram.WebApp.initData> (исходная строка, не initDataUnsafe).
+        Сервер проверяет подпись и user.id. Текущая политика middleware: auth_date не старше
+        24 часов, допустимое время в будущем — не больше 1 минуты. Это настройки проекта.
+  parameters:
+    SubscriptionId:
+      name: subscription_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Id'}
+  responses:
+    BadRequest:
+      description: VALIDATION_ERROR — неверный ID (включая переполнение BIGINT), query-параметр, JSON-тело или значение/вычисленный
+        порог алерта.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example:
+            error: {code: VALIDATION_ERROR, message: Invalid alert value}
+    Unauthorized:
+      description: Заголовок отсутствует либо данные Telegram неверны или просрочены.
+      headers:
+        WWW-Authenticate:
+          schema: {type: string, const: tma}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example:
+            error: {code: TELEGRAM_AUTH_INVALID, message: Missing or invalid Telegram initData}
+    NotFound:
+      description: |
+        USER_NOT_REGISTERED, EXCHANGE_NOT_FOUND, MARKET_NOT_FOUND, SUBSCRIPTION_NOT_FOUND
+        или ALERT_NOT_FOUND. Для чужой подписки/алерта и алерта другой подписки также 404,
+        без раскрытия существования ресурса. При отсутствующей/чужой родительской подписке
+        используется SUBSCRIPTION_NOT_FOUND. Пустой список и страница за пределами списка — 200.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Conflict:
+      description: EXCHANGE_INACTIVE, SUBSCRIPTION_LIMIT_REACHED или ACTIVE_ALERT_LIMIT_REACHED. Лимиты проверяются
+        атомарно при создании/включении; чтение, удаление и отключение доступны.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UnsupportedMediaType:
+      description: UNSUPPORTED_MEDIA_TYPE — ожидается Content-Type application/json (допускается charset=utf-8).
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InternalError:
+      description: INTERNAL_ERROR — внутренняя ошибка сервиса.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unavailable:
+      description: |
+        TELEGRAM_AUTH_UNAVAILABLE — не настроена авторизация; SERVICE_UNAVAILABLE —
+        недоступно обязательное хранилище; MARKET_CATALOG_UNAVAILABLE — недоступен каталог
+        инструментов для поиска или создания нового рынка; QUOTE_UNAVAILABLE — не удалось
+        получить текущую цену для создания рынка или создания/изменения/включения алерта. Чтение при отсутствии
+        котировки возвращает 200 с price: null, а не QUOTE_UNAVAILABLE.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Id:
+      type: string
+      pattern: ^[1-9][0-9]{0,18}$
+      description: Положительное целое от 1 до 9223372036854775807, передаваемое строкой без ведущих нулей. Верхнюю
+        границу сервер проверяет численно, сверх regex.
+      examples:
+      - '42'
+    ExchangeId:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 2147483647
+    User:
+      type: object
+      required:
+      - telegram_user_id
+      properties:
+        telegram_user_id: {$ref: '#/components/schemas/Id'}
+    Exchange:
+      type: object
+      required:
+      - id
+      - name
+      properties:
+        id: {$ref: '#/components/schemas/ExchangeId'}
+        name:
+          type: string
+          examples:
+          - Binance
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          required:
+          - code
+          - message
+          properties:
+            code:
+              type: string
+              examples:
+              - VALIDATION_ERROR
+            message: {type: string}
+    Decimal:
+      type: string
+      pattern: ^-?(0|[1-9][0-9]*)(\.[0-9]+)?$(?![\s\S])
+      description: Десятичная строка с точкой, без экспоненты, пробелов и ведущего плюса.
+      examples:
+      - '-5'
+      - '83781.50'
+    PositiveDecimal:
+      allOf:
+      - {$ref: '#/components/schemas/Decimal'}
+      - not: {pattern: '^(-|0(\.0+)?$)'}
+    PriceValue:
+      allOf:
+      - {$ref: '#/components/schemas/PositiveDecimal'}
+      - {pattern: '^((0|[1-9][0-9]{0,4}|[1-4][0-9]{5})(\.[0-9]+)?|500000(\.0+)?)$'}
+      description: Цена в USDT в диапазоне (0; 500000].
+    PercentValue:
+      allOf:
+      - {$ref: '#/components/schemas/Decimal'}
+      - not: {pattern: '^-?0(\.0+)?$'}
+      anyOf:
+      - {$ref: '#/components/schemas/PriceValue'}
+      - {pattern: '^-(0|[1-9][0-9]?)(\.[0-9]+)?$'}
+      description: 'Знаковый процент: -100 < value <= 500000, value != 0. Рост — "5", падение — "-5". Вычисленная
+        целевая цена также должна быть в (0; 500000].'
+    MarketOption:
+      type: object
+      required:
+      - exchange_id
+      - external_id
+      - name
+      properties:
+        exchange_id: {$ref: '#/components/schemas/ExchangeId'}
+        external_id: {$ref: '#/components/schemas/ExternalInstrumentId'}
+        name:
+          type: string
+          description: Имя монеты для UI без названия биржи; не используется как идентификатор.
+          examples:
+          - Bitcoin
+    ExternalInstrumentId:
+      type: string
+      minLength: 1
+      maxLength: 255
+      pattern: '^[^\s]+$(?![\s\S])'
+      description: |
+        Идентификатор инструмента, полученный от биржи через Exchange-Data.
+        Сохраняется в markets.external_id при добавлении; внутренние BIGSERIAL ID не заменяет.
+        У Binance это symbol, например BTCUSDT. Уникален только вместе с exchange_id
+        в поддерживаемом spot/USDT-каталоге. UI передаёт строку из поиска без изменения;
+        регистр значим, преобразования и разбор символа на клиенте не нужны.
+      examples:
+      - BTCUSDT
+    SubscriptionCreate:
+      type: object
+      required:
+      - exchange_id
+      - external_id
+      additionalProperties: false
+      properties:
+        exchange_id: {$ref: '#/components/schemas/ExchangeId'}
+        external_id: {$ref: '#/components/schemas/ExternalInstrumentId'}
+    MarketPage:
+      type: object
+      required:
+      - items
+      - next_page
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MarketOption'}
+        next_page:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 2147483647
+          description: Номер следующей страницы или null. Страница за пределами списка возвращает пустой items и
+            null.
+    Subscription:
+      type: object
+      required:
+      - subscription_id
+      - name
+      - exchange_name
+      - price
+      properties:
+        subscription_id:
+          $ref: '#/components/schemas/Id'
+          description: ID подписки, используемый в путях карточки, удаления и алертов.
+        name:
+          type: string
+          description: cryptocurrencies.name
+          examples:
+          - Bitcoin
+        exchange_name:
+          type: string
+          examples:
+          - Binance
+        price:
+          oneOf:
+          - {$ref: '#/components/schemas/PositiveDecimal'}
+          - {type: 'null'}
+          description: Текущая цена в USDT или null, если её не удалось получить. На отключённой бирже всегда null.
+    SubscriptionList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Subscription'}
+    SubscriptionDetail:
+      allOf:
+      - {$ref: '#/components/schemas/Subscription'}
+      - type: object
+        required:
+        - alerts
+        properties:
+          alerts:
+            type: array
+            items: {$ref: '#/components/schemas/Alert'}
+    AlertType:
+      type: string
+      enum:
+      - price
+      - percent
+    AlertValueRules:
+      if:
+        required:
+        - type
+        properties:
+          type: {const: price}
+      then:
+        properties:
+          value: {$ref: '#/components/schemas/PriceValue'}
+      else:
+        properties:
+          value: {$ref: '#/components/schemas/PercentValue'}
+    AlertCreate:
+      type: object
+      required:
+      - type
+      - value
+      properties:
+        type: {$ref: '#/components/schemas/AlertType'}
+        value: {$ref: '#/components/schemas/Decimal'}
+      additionalProperties: false
+      allOf:
+      - {$ref: '#/components/schemas/AlertValueRules'}
+    AlertPatch:
+      type: object
+      properties:
+        type: {$ref: '#/components/schemas/AlertType'}
+        value: {$ref: '#/components/schemas/Decimal'}
+        is_active: {type: boolean}
+      additionalProperties: false
+      allOf:
+      - {$ref: '#/components/schemas/AlertValueRules'}
+      oneOf:
+      - required:
+        - is_active
+        not:
+          anyOf:
+          - required:
+            - type
+          - required:
+            - value
+      - required:
+        - type
+        - value
+      description: Только is_active либо полный набор type, value с необязательным is_active.
+    Alert:
+      type: object
+      required:
+      - alert_id
+      - type
+      - value
+      - target_price
+      - is_active
+      properties:
+        alert_id: {$ref: '#/components/schemas/Id'}
+        type: {$ref: '#/components/schemas/AlertType'}
+        value: {$ref: '#/components/schemas/Decimal'}
+        target_price:
+          $ref: '#/components/schemas/PriceValue'
+          description: Готовая целевая цена в USDT для отображения на UI, вычисленная сервером.
+        is_active: {type: boolean}
+      allOf:
+      - {$ref: '#/components/schemas/AlertValueRules'}
+      description: |
+        Сохранённое правило, не история уведомлений. reference_price хранится в БД,
+        но не нужна UI и не возвращается. У price цель равна value; у percent
+        цель вычисляется по сохранённой базе. Направление фиксируется при создании/изменении.
+        Для роста уведомление при previous < target <= current, для падения —
+        previous > target >= current. Срабатывание не выключает алерт;
+        повтор возможен только после возврата и нового пересечения.
+        is_active отражает настройку пользователя, а не доступность биржи или доставку.
+    AlertList:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Alert'}
