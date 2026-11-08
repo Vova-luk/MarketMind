@@ -1,5 +1,7 @@
 # Backend MarketMind
 
+[Контракт API для Telegram Mini App](services/api/README.md)
+
 ## Быстрый запуск в Docker
 
 Нужны Docker с запущенным daemon и Docker Compose 2.20+.
