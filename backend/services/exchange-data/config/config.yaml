@@ -28,6 +28,10 @@ exchanges:
   bybit:
     base_url: https://api.bybit.com
     request_timeout: 5s
+    retry_delay: 3s
+    max_attempts: 3
   okx:
     base_url: https://www.okx.com
     request_timeout: 5s
+    retry_delay: 3s
+    max_attempts: 3

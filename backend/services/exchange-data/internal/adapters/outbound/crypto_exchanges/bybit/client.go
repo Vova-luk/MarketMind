@@ -47,6 +47,7 @@ func NewBybitClient(cfg config.ExchangeConfig, logger *slog.Logger) *BybitClient
 func (c *BybitClient) GetPrices(ctx context.Context, symbols []string) (*domain.Market, error) {
 	started := time.Now()
 	wanted := make(map[string]int, len(symbols))
+	
 	validSymbols := symbols[:0]
 	for _, symbol := range symbols {
 		symbol = strings.TrimSpace(symbol)
