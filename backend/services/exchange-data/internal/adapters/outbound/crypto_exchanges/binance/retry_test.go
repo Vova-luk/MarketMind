@@ -45,7 +45,7 @@ func TestRetriesTemporaryHTTPFailures(t *testing.T) {
 				bodies = append(bodies, body)
 				return &http.Response{StatusCode: code, Header: make(http.Header), Body: body, Request: r}, nil
 			})
-			market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"})
+			market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 			if err != nil || market == nil || calls != 3 {
 				t.Fatalf("market=%+v, err=%v, calls=%d", market, err, calls)
 			}
@@ -68,7 +68,7 @@ func TestRetryTimeoutThenSuccess(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"symbol":"BTCUSDT","price":"1.00"}`)), Request: r}, nil
 	})
-	market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"})
+	market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 	if err != nil || market == nil || calls != 3 {
 		t.Fatalf("market=%+v, err=%v, calls=%d", market, err, calls)
 	}
@@ -82,7 +82,7 @@ func TestRetryExhaustionPreservesError(t *testing.T) {
 		calls++
 		return nil, want
 	})
-	market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"})
+	market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 	if market != nil || !errors.Is(err, want) || calls != 3 {
 		t.Fatalf("market=%+v, err=%v, calls=%d", market, err, calls)
 	}
@@ -95,7 +95,7 @@ func TestNoWaitAfterLastAttempt(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"})
+	_, err := client.GetPrices(ctx, []string{"BTCUSDT"})
 	if !errors.Is(err, requestTimeoutError{}) || ctx.Err() != nil {
 		t.Fatalf("last attempt must return immediately: err=%v, ctx=%v", err, ctx.Err())
 	}
@@ -111,7 +111,7 @@ func TestPermanentFailuresAreNotRetried(t *testing.T) {
 				calls++
 				return &http.Response{StatusCode: status, Header: make(http.Header), Body: body, Request: r}, nil
 			})
-			market, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"})
+			market, err := client.GetPrices(context.Background(), []string{"BTCUSDT"})
 			if err == nil || market != nil || calls != 1 || !body.closed {
 				t.Fatalf("market=%+v, err=%v, calls=%d, closed=%v", market, err, calls, body.closed)
 			}
@@ -124,7 +124,7 @@ func TestPermanentFailuresAreNotRetried(t *testing.T) {
 		calls++
 		return nil, want
 	})
-	if _, err := client.GetActualCryptocurrencyPrice(context.Background(), []string{"BTCUSDT"}); !errors.Is(err, want) || calls != 1 {
+	if _, err := client.GetPrices(context.Background(), []string{"BTCUSDT"}); !errors.Is(err, want) || calls != 1 {
 		t.Fatalf("err=%v, calls=%d", err, calls)
 	}
 }
@@ -147,7 +147,7 @@ func TestCancellationStopsRetryWait(t *testing.T) {
 		calls++
 		return nil, requestTimeoutError{}
 	})
-	_, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"})
+	_, err := client.GetPrices(ctx, []string{"BTCUSDT"})
 	if !errors.Is(err, context.Canceled) || calls != 1 {
 		t.Fatalf("err=%v, calls=%d", err, calls)
 	}
@@ -161,7 +161,7 @@ func TestCanceledContextDoesNotSendRequest(t *testing.T) {
 		t.Fatal("request sent after cancellation")
 		return nil, nil
 	})
-	if _, err := client.GetActualCryptocurrencyPrice(ctx, []string{"BTCUSDT"}); !errors.Is(err, context.Canceled) {
+	if _, err := client.GetPrices(ctx, []string{"BTCUSDT"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
 	}
 }

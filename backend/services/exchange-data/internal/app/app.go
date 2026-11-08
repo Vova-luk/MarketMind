@@ -6,12 +6,16 @@ import (
 	"net/http"
 
 	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance"
+	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/bybit"
+	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/okx"
 	"marketmind/exchange-data/internal/config"
 	"marketmind/exchange-data/internal/server"
 )
 
 type Application struct {
 	server        *server.Server
+	okxClient     *okx.OKXClient
+	bybitClient   *bybit.BybitClient
 	binanceClient *binance.BinanceClient
 }
 
@@ -31,6 +35,8 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 	return &Application{
 		server:        srv,
 		binanceClient: binance.NewBinanceClient(cfg.Exchanges.Binance, logger),
+		bybitClient:   bybit.NewBybitClient(cfg.Exchanges.Bybit, logger),
+		okxClient:     okx.NewOKXClient(cfg.Exchanges.OKX, logger),
 	}, nil
 }
 
