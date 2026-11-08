@@ -82,3 +82,10 @@ gRPC API котировок, опрос бирж и Kafka producer пока не
 Воркер, gRPC и WebSocket ещё не запускаются этим клиентом автоматически.
 
 [Документация OKX: GET / Tickers](https://www.okx.com/docs-v5/en/#order-book-trading-market-data-get-tickers).
+
+## Общие HTTP-ретраи
+
+Binance, Bybit и OKX используют `internal/utils.DoWithRetry`.
+Функция получает HTTP-клиент, запрос, настройки попыток и логгер.
+Её сообщения и ошибки не содержат названий бирж. Ошибки разбора ответов и
+проверка специфичных кодов API остаются в адаптерах соответствующих бирж.

@@ -3,14 +3,13 @@ package binance
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance/dto"
 	"marketmind/exchange-data/internal/config"
 	"marketmind/exchange-data/internal/domain"
+	"marketmind/exchange-data/internal/utils"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -86,7 +85,10 @@ func (c *BinanceClient) GetPrices(ctx context.Context, symbols []string) (*domai
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.doWithRetry(req)
+	resp, err := utils.DoWithRetry(req, c.client, utils.RetryConfig{
+		MaxAttempts: c.maxAttempts,
+		Delay:       c.retryDelay,
+	}, c.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -141,80 +143,6 @@ func (c *BinanceClient) GetPrices(ctx context.Context, symbols []string) (*domai
 	}
 
 	return &market, nil
-}
-
-func (c *BinanceClient) doWithRetry(req *http.Request) (*http.Response, error) {
-	ctx := req.Context()
-	if c.maxAttempts < 1 {
-		return nil, fmt.Errorf("Binance max_attempts must be at least 1")
-	}
-	var lastErr error
-
-	for attempt := 1; attempt <= c.maxAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		resp, err := c.client.Do(req)
-
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-
-			var netErr net.Error
-			if !errors.As(err, &netErr) || !netErr.Timeout() {
-				return nil, fmt.Errorf("send Binance request: %w", err)
-			}
-
-			lastErr = err
-		} else {
-			switch resp.StatusCode {
-			case http.StatusOK:
-				return resp, nil
-
-			case http.StatusBadGateway,
-				http.StatusServiceUnavailable,
-				http.StatusGatewayTimeout:
-				lastErr = fmt.Errorf(
-					"Binance returned HTTP %d", resp.StatusCode,
-				)
-				resp.Body.Close()
-
-			default:
-				resp.Body.Close()
-				return nil, fmt.Errorf(
-					"Binance returned HTTP %d", resp.StatusCode,
-				)
-			}
-		}
-
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if attempt == c.maxAttempts {
-			break
-		}
-
-		c.logger.WarnContext(ctx, "Binance request failed; retrying",
-			slog.Int("attempt", attempt),
-			slog.Duration("retry_delay", c.retryDelay),
-			slog.Any("error", lastErr),
-		)
-
-		timer := time.NewTimer(c.retryDelay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
-		}
-	}
-
-	return nil, fmt.Errorf(
-		"Binance request failed after %d attempts: %w",
-		c.maxAttempts, lastErr,
-	)
 }
 
 func validatePrice(value string) error {

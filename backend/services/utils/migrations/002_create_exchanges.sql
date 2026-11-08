@@ -5,5 +5,11 @@ CREATE TABLE market_mind.exchanges (
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+INSERT INTO market_mind.exchanges (id, name, is_active)
+VALUES
+    (1, 'Binance', TRUE),
+    (2, 'Bybit', TRUE),
+    (3, 'OKX', TRUE);
+
 -- +goose Down
 DROP TABLE market_mind.exchanges;

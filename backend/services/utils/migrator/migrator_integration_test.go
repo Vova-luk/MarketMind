@@ -101,13 +101,11 @@ func TestMigrationLifecycle(t *testing.T) {
 	if results, err := provider.Up(ctx); err != nil || len(results) != 0 {
 		t.Fatalf("second Up must be a no-op: applied %d, error %v", len(results), err)
 	}
+	assertSeededExchanges(t, ctx, pool)
 	t.Log("Up and repeated Up succeeded")
 
 	var coinID, marketID, userID, subscriptionID int64
 	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.cryptocurrencies (name) VALUES ('Bitcoin') RETURNING id`).Scan(&coinID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.exchanges (id, name) VALUES (1, 'Binance')`); err != nil {
 		t.Fatal(err)
 	}
 	const price = "0.123456789012345678"
@@ -156,9 +154,11 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertMarketTables(t, ctx, pool, tables[1:])
+	assertSeededExchanges(t, ctx, pool)
 	if results, err := provider.Up(ctx); err != nil || len(results) != 1 {
 		t.Fatalf("reapply last migration: applied %d, error %v", len(results), err)
 	}
+	assertSeededExchanges(t, ctx, pool)
 	if results, err := provider.DownTo(ctx, 0); err != nil || len(results) != 6 {
 		t.Fatalf("full rollback: reverted %d, error %v", len(results), err)
 	}
@@ -170,6 +170,7 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatalf("Up after rollback: applied %d, error %v", len(results), err)
 	}
 	assertMarketTables(t, ctx, pool, tables)
+	assertSeededExchanges(t, ctx, pool)
 	t.Log("single Down, full Down and Up after rollback succeeded")
 
 	files := fstest.MapFS{}
@@ -196,4 +197,36 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatalf("failed migration changed the version: %d, error %v", version, err)
 	}
 	t.Log("failed migration rolled back atomically")
+}
+
+func assertSeededExchanges(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	rows, err := pool.Query(ctx, `SELECT id, name, is_active FROM market_mind.exchanges ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	names := []string{"Binance", "Bybit", "OKX"}
+	i := 0
+	for rows.Next() {
+		var id int
+		var name string
+		var active bool
+		if err := rows.Scan(&id, &name, &active); err != nil {
+			t.Fatal(err)
+		}
+		if i >= len(names) {
+			t.Fatal("unexpected extra exchange")
+		}
+		if id != i+1 || name != names[i] || !active {
+			t.Fatalf("unexpected seeded exchange: id=%d, name=%q, active=%v", id, name, active)
+		}
+		i++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if i != len(names) {
+		t.Fatalf("expected %d exchanges, got %d", len(names), i)
+	}
 }
