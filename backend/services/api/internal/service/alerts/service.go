@@ -81,13 +81,17 @@ func (s *Service) Update(ctx context.Context, telegramUserID, subscriptionID, al
 		next.IsActive = *patch.IsActive
 	}
 	enabling := next.IsActive && !current.IsActive
-	conditionChanged := patch.Condition != nil && !sameCondition(current.Condition, *patch.Condition)
+	targetChanged := patch.Condition != nil && !sameTargetInput(current.Condition, *patch.Condition)
+	if patch.Condition != nil {
+		next.Direction = patch.Condition.Direction
+	}
+	conditionChanged := targetChanged || next.Direction != current.Direction
 	if conditionChanged || enabling {
 		if err := validateQuote(subscription); err != nil {
 			return Result{}, err
 		}
 	}
-	if conditionChanged {
+	if targetChanged {
 		next.Condition = *patch.Condition
 		next.ReferencePrice = subscription.Price
 	}
@@ -96,7 +100,7 @@ func (s *Service) Update(ctx context.Context, telegramUserID, subscriptionID, al
 	if err != nil {
 		return Result{}, err
 	}
-	if conditionChanged {
+	if targetChanged {
 		if err := validateTarget(target, next.ReferencePrice); err != nil {
 			return Result{}, err
 		}
@@ -160,7 +164,7 @@ func validateTarget(target, referencePrice string) error {
 	return nil
 }
 
-func sameCondition(old, current domain.Condition) bool {
+func sameTargetInput(old, current domain.Condition) bool {
 	if old.Type != current.Type {
 		return false
 	}

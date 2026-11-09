@@ -18,6 +18,7 @@ import (
 
 	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
 	domainusers "marketmind/api/internal/domain/users"
+	alerthandlers "marketmind/api/internal/handlers/alerts"
 	subscriptionhandlers "marketmind/api/internal/handlers/subscriptions"
 	userhandlers "marketmind/api/internal/handlers/users"
 )
@@ -97,11 +98,11 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 				ID: 18, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance", Price: &price,
 			},
 			UpdatedAt: time.Date(2026, 11, 9, 11, 30, 0, 0, time.FixedZone("UTC+3", 3*60*60)),
-			Alerts:    []domainsubscriptions.Alert{{ID: 9, Type: "percent", Value: "5", TargetPrice: "87970.05", IsActive: true}},
+			Alerts:    []domainsubscriptions.Alert{{ID: 9, Type: "percent", Value: "5", Condition: "gte", ReferencePrice: "83781", TargetPrice: "87970.05", IsActive: true}},
 		}, nil
 	}}
 	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil,
-		subscriptionhandlers.NewHandler(reader, nil, logger), nil)
+		subscriptionhandlers.NewHandler(reader, nil, logger), alerthandlers.NewHandler(nil, reader, logger))
 
 	for _, tc := range []struct {
 		path   string
@@ -109,7 +110,9 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 		body   string
 	}{
 		{"/api/v1/subscriptions/18", http.StatusOK,
-			`{"subscription_id":"18","base_asset":"BTC","quote_asset":"USDT","exchange_name":"Binance","price":"83781.00000000000001","updated_at":"2026-11-09T08:30:00Z","alerts":[{"alert_id":"9","type":"percent","value":"5","target_price":"87970.05","is_active":true}]}`},
+			`{"subscription_id":"18","base_asset":"BTC","quote_asset":"USDT","exchange_name":"Binance","price":"83781.00000000000001","updated_at":"2026-11-09T08:30:00Z","alerts":[{"alert_id":"9","type":"percent","value":"5","condition":"gte","reference_price":"83781","target_price":"87970.05","is_active":true}]}`},
+		{"/api/v1/subscriptions/18/alerts", http.StatusOK,
+			`{"items":[{"alert_id":"9","type":"percent","value":"5","condition":"gte","reference_price":"83781","target_price":"87970.05","is_active":true,"quote_asset":"USDT"}]}`},
 		{"/api/v1/subscriptions/018", http.StatusBadRequest,
 			`{"error":{"code":"VALIDATION_ERROR","message":"Invalid subscription ID"}}`},
 	} {

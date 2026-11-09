@@ -1,6 +1,7 @@
 package alerts
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,12 +16,49 @@ import (
 )
 
 type Handler struct {
-	service *service.Service
-	logger  *slog.Logger
+	service       *service.Service
+	subscriptions subscriptionReader
+	logger        *slog.Logger
 }
 
-func NewHandler(service *service.Service, logger *slog.Logger) *Handler {
-	return &Handler{service: service, logger: logger}
+type subscriptionReader interface {
+	Get(ctx context.Context, telegramUserID, subscriptionID int64) (subscriptions.Detail, error)
+}
+
+func NewHandler(service *service.Service, subscriptions subscriptionReader, logger *slog.Logger) *Handler {
+	return &Handler{service: service, subscriptions: subscriptions, logger: logger}
+}
+
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	subscriptionID, ok := readSubscriptionID(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	telegramUserID, _ := requestctx.TelegramUserID(ctx)
+	detail, err := h.subscriptions.Get(ctx, telegramUserID, subscriptionID)
+	if errors.Is(err, subscriptions.ErrNotFound) {
+		httpresponse.WriteError(w, http.StatusNotFound, "SUBSCRIPTION_NOT_FOUND", "Subscription not found")
+		return
+	}
+	if err != nil {
+		h.logger.ErrorContext(ctx, "list alerts", "error", err)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Could not list alerts")
+		return
+	}
+
+	items := make([]alertResponse, 0, len(detail.Alerts))
+	for _, alert := range detail.Alerts {
+		items = append(items, alertResponse{
+			ID: alert.ID, Type: alert.Type, Value: alert.Value,
+			Condition:      alert.Condition,
+			ReferencePrice: alert.ReferencePrice, TargetPrice: alert.TargetPrice,
+			IsActive: alert.IsActive, QuoteAsset: detail.QuoteAsset,
+		})
+	}
+	httpresponse.WriteJSON(w, http.StatusOK, struct {
+		Items []alertResponse `json:"items"`
+	}{Items: items})
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {

@@ -23,11 +23,22 @@ var (
 )
 
 type Condition struct {
-	Type  string
-	Value string
+	Type      string
+	Value     string
+	Direction Direction
 }
 
+type Direction string
+
+const (
+	GreaterOrEqual Direction = "gte"
+	LessOrEqual    Direction = "lte"
+)
+
 func (c Condition) Validate() error {
+	if c.Direction != GreaterOrEqual && c.Direction != LessOrEqual {
+		return fmt.Errorf("%w: condition must be gte or lte", ErrInvalid)
+	}
 	value, ok := ParseDecimal(c.Value)
 	if !ok {
 		return fmt.Errorf("%w: value must be a decimal string", ErrInvalid)

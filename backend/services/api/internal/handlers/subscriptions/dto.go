@@ -21,11 +21,13 @@ type detailResponse struct {
 }
 
 type alertResponse struct {
-	ID          int64  `json:"alert_id,string"`
-	Type        string `json:"type"`
-	Value       string `json:"value"`
-	TargetPrice string `json:"target_price"`
-	IsActive    bool   `json:"is_active"`
+	ID             int64  `json:"alert_id,string"`
+	Type           string `json:"type"`
+	Value          string `json:"value"`
+	Condition      string `json:"condition"`
+	ReferencePrice string `json:"reference_price"`
+	TargetPrice    string `json:"target_price"`
+	IsActive       bool   `json:"is_active"`
 }
 
 func toSubscriptionResponse(subscription domainsubscriptions.Subscription) subscriptionResponse {

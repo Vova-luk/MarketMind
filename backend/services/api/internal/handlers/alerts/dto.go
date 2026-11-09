@@ -13,18 +13,22 @@ import (
 )
 
 type alertResponse struct {
-	ID          int64  `json:"alert_id,string"`
-	Type        string `json:"type"`
-	Value       string `json:"value"`
-	TargetPrice string `json:"target_price"`
-	IsActive    bool   `json:"is_active"`
-	QuoteAsset  string `json:"quote_asset"`
+	ID             int64  `json:"alert_id,string"`
+	Type           string `json:"type"`
+	Value          string `json:"value"`
+	Condition      string `json:"condition"`
+	ReferencePrice string `json:"reference_price"`
+	TargetPrice    string `json:"target_price"`
+	IsActive       bool   `json:"is_active"`
+	QuoteAsset     string `json:"quote_asset"`
 }
 
 func toResponse(result service.Result) alertResponse {
 	return alertResponse{
 		ID: result.ID, Type: result.Type, Value: result.Value,
-		TargetPrice: result.TargetPrice, IsActive: result.IsActive, QuoteAsset: result.QuoteAsset,
+		Condition:      string(result.Direction),
+		ReferencePrice: result.ReferencePrice, TargetPrice: result.TargetPrice,
+		IsActive: result.IsActive, QuoteAsset: result.QuoteAsset,
 	}
 }
 
@@ -57,6 +61,7 @@ func decodeChange(decoder *json.Decoder, allowActive bool) (service.Patch, bool)
 	}
 
 	var kind, value *string
+	var direction *domain.Direction
 	var active *bool
 	for key, raw := range fields {
 		switch key {
@@ -68,6 +73,10 @@ func decodeChange(decoder *json.Decoder, allowActive bool) (service.Patch, bool)
 			if err := json.Unmarshal(raw, &value); err != nil || value == nil {
 				return service.Patch{}, false
 			}
+		case "condition":
+			if err := json.Unmarshal(raw, &direction); err != nil || direction == nil {
+				return service.Patch{}, false
+			}
 		case "is_active":
 			if err := json.Unmarshal(raw, &active); !allowActive || err != nil || active == nil {
 				return service.Patch{}, false
@@ -76,12 +85,13 @@ func decodeChange(decoder *json.Decoder, allowActive bool) (service.Patch, bool)
 			return service.Patch{}, false
 		}
 	}
-	if (kind == nil) != (value == nil) || (kind == nil && active == nil) {
+	change := service.Patch{IsActive: active}
+	if kind == nil && value == nil && direction == nil && active != nil {
+		return change, true
+	}
+	if kind == nil || value == nil || direction == nil {
 		return service.Patch{}, false
 	}
-	change := service.Patch{IsActive: active}
-	if kind != nil {
-		change.Condition = &domain.Condition{Type: *kind, Value: *value}
-	}
+	change.Condition = &domain.Condition{Type: *kind, Value: *value, Direction: *direction}
 	return change, true
 }

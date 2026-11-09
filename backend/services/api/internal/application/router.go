@@ -30,6 +30,7 @@ func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler,
 			registered.Post("/subscriptions", subscriptionHandler.Add)
 			registered.Get("/subscriptions/{subscription_id}", subscriptionHandler.Get)
 			registered.Delete("/subscriptions/{subscription_id}", subscriptionHandler.Delete)
+			registered.Get("/subscriptions/{subscription_id}/alerts", alertHandler.List)
 			registered.Post("/subscriptions/{subscription_id}/alerts", alertHandler.Create)
 			registered.Patch("/subscriptions/{subscription_id}/alerts/{alert_id}", alertHandler.Update)
 			registered.Delete("/subscriptions/{subscription_id}/alerts/{alert_id}", alertHandler.Delete)

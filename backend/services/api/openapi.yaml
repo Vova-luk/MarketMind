@@ -309,16 +309,22 @@ paths:
                 - alert_id: '9'
                   type: percent
                   value: '5'
+                  condition: gte
+                  reference_price: '83781'
                   target_price: '87970.05'
                   is_active: true
                 - alert_id: '10'
                   type: percent
                   value: '-5'
+                  condition: lte
+                  reference_price: '83781'
                   target_price: '79591.95'
                   is_active: false
                 - alert_id: '11'
                   type: price
                   value: '83000'
+                  condition: lte
+                  reference_price: '83781'
                   target_price: '83000'
                   is_active: true
                 base_asset: BTC
@@ -352,13 +358,14 @@ paths:
     get:
       tags:
       - Alerts
-      x-implementation-status: planned
+      x-implementation-status: implemented
       operationId: listSubscriptionAlerts
       summary: Получить все алерты подписки
       description: |
         Все активные и отключённые алерты по alert_id ASC. В самостоятельном ответе
         каждый алерт содержит quote_asset. Нужен для обновления алертов без повторной загрузки карточки.
-        Без пагинации. Цена и доступность биржи не влияют на чтение сохранённых условий.
+        Цель рассчитывается при чтении из сохранённого условия и reference_price.
+        Без пагинации. Текущая цена и доступность биржи не влияют на сохранённые условия.
       responses:
         '200':
           description: Список алертов; items пуст, если условия ещё не созданы.
@@ -373,18 +380,24 @@ paths:
                     - alert_id: '9'
                       type: percent
                       value: '5'
+                      condition: gte
+                      reference_price: '83781'
                       target_price: '87970.05'
                       is_active: true
                       quote_asset: USDT
                     - alert_id: '10'
                       type: percent
                       value: '-5'
+                      condition: lte
+                      reference_price: '83781'
                       target_price: '79591.95'
                       is_active: false
                       quote_asset: USDT
                     - alert_id: '11'
                       type: price
                       value: '83000'
+                      condition: lte
+                      reference_price: '83781'
                       target_price: '83000'
                       is_active: true
                       quote_asset: USDT
@@ -404,18 +417,17 @@ paths:
       operationId: createAlert
       summary: Добавить активный алерт на рынок
       description: |
-        Клиент передаёт type и value. Сервер читает последнюю сохранённую цену из
+        Клиент передаёт type, value и condition. Сервер читает последнюю сохранённую цену из
         markets.price и фиксирует её в alerts.reference_price. Размер JSON-тела — до 8 КиБ.
         Для price value — положительная целевая цена в quote_asset подписки: target_price = value.
         reference_price и target_price также измеряются в quote_asset. Код валюты берётся из рынка,
         клиент не может задать или поменять его в запросе алерта.
-        Цель выше reference_price означает рост, ниже — падение; равная цена запрещена (400).
-        Для percent value — знаковое изменение: "5" означает рост на 5%, "-5" — падение на 5%.
+        Цель, равная reference_price, отклоняется с 400.
+        Для percent знак value задаёт положение цели относительно базы: "5" означает на 5% выше, "-5" — на 5% ниже.
         target_price = reference_price * (1 + value / 100).
         Нулевой процент и падение на 100% или больше запрещены.
         Целевая цена должна быть в (0; 500000] единиц quote_asset (текущий лимит, без пересчёта в USD). Вычисления десятичные, без float64.
-        Направление не передаётся и не хранится отдельно; оно определяется по сохранённой
-        базовой цене и цели, а не по текущей цене при чтении.
+        Сервер сохраняет переданный condition. Он задаёт направление пересечения независимо от цели.
         Требуются активная биржа, положительная сохранённая цена и место в лимите активных алертов.
         Создание само по себе не отправляет уведомление: отслеживаются последующие пересечения.
         POST не идемпотентен: повтор создаёт ещё один алерт. После тайм-аута клиент
@@ -428,13 +440,13 @@ paths:
             examples:
               price:
                 summary: Достичь 83000 USDT; при исходной цене 83781 это падение
-                value: {type: price, value: '83000'}
+                value: {type: price, value: '83000', condition: lte}
               percentUp:
                 summary: Рост на 5% от цены при создании
-                value: {type: percent, value: '5'}
+                value: {type: percent, value: '5', condition: gte}
               percentDown:
                 summary: Падение на 5% от цены при создании
-                value: {type: percent, value: '-5'}
+                value: {type: percent, value: '-5', condition: lte}
       responses:
         '201':
           description: Создан новый активный алерт.
@@ -452,6 +464,8 @@ paths:
                 alert_id: '9'
                 type: percent
                 value: '5'
+                condition: gte
+                reference_price: '83781'
                 target_price: '87970.05'
                 is_active: true
                 quote_asset: USDT
@@ -476,11 +490,11 @@ paths:
       operationId: updateAlert
       summary: Изменить условие или включить и выключить алерт
       description: |
-        Передаётся is_active и/или полный набор type, value. Пустое тело, null
+        Передаётся is_active и/или полный набор type, value, condition. Пустое тело, null
         и неполный набор условия — 400 VALIDATION_ERROR. Размер JSON-тела — до 8 КиБ.
-        Фактическое изменение type/value фиксирует reference_price из markets.price и пересчитывает
-        цель и направление по правилам создания, даже если алерт отключён.
-        Неизменное условие (в том числе value "5" вместо "5.0") не меняет базу.
+        При фактическом изменении type/value сервер фиксирует новую reference_price из markets.price.
+        Если меняется только направление condition, база и цель сохраняются.
+        Значения "5" и "5.0" считаются одинаковыми.
         Изменение только is_active сохраняет исходную цену, цель и направление.
         Для изменения условия и включения нужны активная биржа и положительная сохранённая цена;
         при переходе false → true также проверяется лимит активных алертов.
@@ -497,7 +511,7 @@ paths:
               disable:
                 value: {is_active: false}
               change:
-                value: {type: percent, value: '-5'}
+                value: {type: percent, value: '-5', condition: lte}
       responses:
         '200':
           description: Алерт после изменения.
@@ -508,6 +522,8 @@ paths:
                 alert_id: '9'
                 type: percent
                 value: '5'
+                condition: gte
+                reference_price: '83781'
                 target_price: '87970.05'
                 is_active: false
                 quote_asset: USDT
@@ -890,6 +906,10 @@ components:
       enum:
       - price
       - percent
+    AlertDirection:
+      type: string
+      enum: [gte, lte]
+      description: Направление пересечения цели. gte означает снизу вверх, lte — сверху вниз.
     AlertValueRules:
       if:
         required:
@@ -907,9 +927,11 @@ components:
       required:
       - type
       - value
+      - condition
       properties:
         type: {$ref: '#/components/schemas/AlertType'}
         value: {$ref: '#/components/schemas/Decimal'}
+        condition: {$ref: '#/components/schemas/AlertDirection'}
       additionalProperties: false
       allOf:
       - {$ref: '#/components/schemas/AlertValueRules'}
@@ -918,6 +940,7 @@ components:
       properties:
         type: {$ref: '#/components/schemas/AlertType'}
         value: {$ref: '#/components/schemas/Decimal'}
+        condition: {$ref: '#/components/schemas/AlertDirection'}
         is_active: {type: boolean}
       additionalProperties: false
       allOf:
@@ -931,22 +954,31 @@ components:
             - type
           - required:
             - value
+          - required:
+            - condition
       - required:
         - type
         - value
-      description: Только is_active либо полный набор type, value с необязательным is_active.
+        - condition
+      description: Только is_active либо полный набор type, value, condition с необязательным is_active.
     SubscriptionAlert:
       type: object
       required:
       - alert_id
       - type
       - value
+      - condition
+      - reference_price
       - target_price
       - is_active
       properties:
         alert_id: {$ref: '#/components/schemas/Id'}
         type: {$ref: '#/components/schemas/AlertType'}
         value: {$ref: '#/components/schemas/Decimal'}
+        condition: {$ref: '#/components/schemas/AlertDirection'}
+        reference_price:
+          $ref: '#/components/schemas/PositiveDecimal'
+          description: Цена пары в момент создания алерта или изменения его условия.
         target_price:
           $ref: '#/components/schemas/PriceValue'
           description: Целевая цена в валюте котировки подписки, вычисленная сервером.
@@ -954,10 +986,9 @@ components:
       allOf:
       - {$ref: '#/components/schemas/AlertValueRules'}
       description: |
-        Сохранённое правило, не история уведомлений. reference_price хранится в БД,
-        но не нужна UI и не возвращается. У price цель равна value; у percent
-        цель вычисляется по сохранённой базе. Направление фиксируется при создании/изменении.
-        Для роста уведомление при previous < target <= current, для падения —
+        У price цель равна value. У percent сервер рассчитывает её из сохранённых
+        reference_price и value. UI может показать переход от reference_price к target_price.
+        Для gte уведомление при previous < target <= current, для lte —
         previous > target >= current. Срабатывание не выключает алерт;
         повтор возможен только после возврата и нового пересечения.
         is_active отражает настройку пользователя, а не доступность биржи или доставку.

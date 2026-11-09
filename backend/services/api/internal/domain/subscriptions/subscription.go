@@ -23,11 +23,13 @@ type Detail struct {
 }
 
 type Alert struct {
-	ID          int64
-	Type        string
-	Value       string
-	TargetPrice string
-	IsActive    bool
+	ID             int64
+	Type           string
+	Value          string
+	Condition      string
+	ReferencePrice string
+	TargetPrice    string
+	IsActive       bool
 }
 
 type Repository interface {

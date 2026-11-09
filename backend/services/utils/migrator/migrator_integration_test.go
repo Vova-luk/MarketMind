@@ -122,7 +122,8 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var createdAfter time.Time
-	if err := pool.QueryRow(ctx, `UPDATE market_mind.markets SET price = 1.25 WHERE id=$1 RETURNING created_at, updated_at`, marketID).
+	if err := pool.QueryRow(ctx, `UPDATE market_mind.markets SET price = 1.25, updated_at = statement_timestamp()
+		WHERE id=$1 RETURNING created_at, updated_at`, marketID).
 		Scan(&createdAfter, &updatedAt); err != nil || !createdAfter.Equal(createdAt) || updatedAt.Before(createdAt) {
 		t.Fatalf("market timestamps after price write: created %v, updated %v, error %v", createdAfter, updatedAt, err)
 	}
@@ -146,7 +147,8 @@ func TestMigrationLifecycle(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.subscriptions (user_id, market_id) VALUES ($1, $2) RETURNING id`, userID, marketID).Scan(&subscriptionID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, reference_price) VALUES ('percent', $1, 2.5, $2)`, subscriptionID, price); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, condition, reference_price)
+		VALUES ('percent', $1, 2.5, 'gte', $2)`, subscriptionID, price); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {

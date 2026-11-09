@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	domainalerts "marketmind/api/internal/domain/alerts"
 	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
 )
 
@@ -48,7 +47,12 @@ func (r *Repository) List(ctx context.Context, telegramUserID int64) ([]domainsu
 func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+subscriptionColumns+`, m.updated_at,
-		       a.id, a.type, a.value::text, a.reference_price::text, a.is_active
+		       a.id, a.type, a.value::text, a.condition, a.reference_price::text,
+		       (CASE a.type
+		           WHEN 'price' THEN a.value
+		           WHEN 'percent' THEN trim_scale(a.reference_price * (1 + a.value * 0.01))
+		       END)::text AS target_price,
+		       a.is_active
 		`+subscriptionJoins+`
 		LEFT JOIN market_mind.alerts AS a ON a.subscription_id = s.id
 		WHERE u.telegram_user_id = $1 AND s.id = $2
@@ -63,29 +67,26 @@ func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int
 	found := false
 	for rows.Next() {
 		var alertID *int64
-		var alertType, value, referencePrice *string
+		var alertType, value, condition, referencePrice, targetPrice *string
 		var isActive *bool
 		if err := rows.Scan(&detail.ID, &detail.BaseAsset, &detail.QuoteAsset,
 			&detail.ExchangeName, &detail.Price, &detail.UpdatedAt,
-			&alertID, &alertType, &value, &referencePrice, &isActive); err != nil {
+			&alertID, &alertType, &value, &condition, &referencePrice, &targetPrice, &isActive); err != nil {
 			return domainsubscriptions.Detail{}, fmt.Errorf("scan subscription detail: %w", err)
 		}
 		found = true
 		if alertID != nil {
-			alert := domainalerts.Alert{
-				Condition:      domainalerts.Condition{Type: *alertType, Value: *value},
-				ReferencePrice: *referencePrice,
-			}
-			targetPrice, err := alert.TargetPrice()
-			if err != nil {
-				return domainsubscriptions.Detail{}, fmt.Errorf("read target price for alert %d: %w", *alertID, err)
+			if targetPrice == nil {
+				return domainsubscriptions.Detail{}, fmt.Errorf("unknown type %q for alert %d", *alertType, *alertID)
 			}
 			detail.Alerts = append(detail.Alerts, domainsubscriptions.Alert{
-				ID:          *alertID,
-				Type:        *alertType,
-				Value:       *value,
-				TargetPrice: targetPrice,
-				IsActive:    *isActive,
+				ID:             *alertID,
+				Type:           *alertType,
+				Value:          *value,
+				Condition:      *condition,
+				ReferencePrice: *referencePrice,
+				TargetPrice:    *targetPrice,
+				IsActive:       *isActive,
 			})
 		}
 	}
