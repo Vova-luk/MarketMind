@@ -5,7 +5,11 @@ import (
 	"fmt"
 
 	"marketmind/api/internal/config"
+	exchangehandlers "marketmind/api/internal/handlers/exchanges"
+	subscriptionhandlers "marketmind/api/internal/handlers/subscriptions"
 	userhandlers "marketmind/api/internal/handlers/users"
+	exchangerepository "marketmind/api/internal/repository/exchanges"
+	subscriptionrepository "marketmind/api/internal/repository/subscriptions"
 	userrepository "marketmind/api/internal/repository/users"
 	"marketmind/api/internal/server"
 	"marketmind/utils/logger"
@@ -61,7 +65,9 @@ func (a *Application) initMigrator(ctx context.Context) error {
 
 func (a *Application) initRouter() {
 	users := userhandlers.NewHandler(userrepository.NewRepository(a.database), a.logger)
-	a.router = NewRouter(a.logger, users, a.config.String("telegram.bot_token"))
+	exchanges := exchangehandlers.NewHandler(exchangerepository.NewRepository(a.database), a.logger)
+	subscriptions := subscriptionhandlers.NewHandler(subscriptionrepository.NewRepository(a.database), a.logger)
+	a.router = NewRouter(a.logger, a.config.String("telegram.bot_token"), users, exchanges, subscriptions)
 }
 
 func (a *Application) initServer() error {

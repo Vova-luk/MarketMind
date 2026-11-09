@@ -1,0 +1,51 @@
+package subscriptions
+
+import (
+	"time"
+
+	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
+)
+
+type subscriptionResponse struct {
+	ID           int64   `json:"subscription_id,string"`
+	BaseAsset    string  `json:"base_asset"`
+	QuoteAsset   string  `json:"quote_asset"`
+	ExchangeName string  `json:"exchange_name"`
+	Price        *string `json:"price"`
+}
+
+type detailResponse struct {
+	subscriptionResponse
+	UpdatedAt time.Time       `json:"updated_at"`
+	Alerts    []alertResponse `json:"alerts"`
+}
+
+type alertResponse struct {
+	ID          int64  `json:"alert_id,string"`
+	Type        string `json:"type"`
+	Value       string `json:"value"`
+	TargetPrice string `json:"target_price"`
+	IsActive    bool   `json:"is_active"`
+}
+
+func toSubscriptionResponse(subscription domainsubscriptions.Subscription) subscriptionResponse {
+	return subscriptionResponse{
+		ID:           subscription.ID,
+		BaseAsset:    subscription.BaseAsset,
+		QuoteAsset:   subscription.QuoteAsset,
+		ExchangeName: subscription.ExchangeName,
+		Price:        subscription.Price,
+	}
+}
+
+func toDetailResponse(detail domainsubscriptions.Detail) detailResponse {
+	alerts := make([]alertResponse, 0, len(detail.Alerts))
+	for _, alert := range detail.Alerts {
+		alerts = append(alerts, alertResponse(alert))
+	}
+	return detailResponse{
+		subscriptionResponse: toSubscriptionResponse(detail.Subscription),
+		UpdatedAt:            detail.UpdatedAt.UTC(),
+		Alerts:               alerts,
+	}
+}

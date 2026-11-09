@@ -3,26 +3,32 @@ info:
   title: MarketMind Mini App API
   version: 1.0.0-draft
   description: |
-    Каждый запрос содержит Authorization: tma <Telegram.WebApp.initData>.
+    Каждый запрос Mini App содержит Authorization: tma <Telegram.WebApp.initData>.
     При каждом открытии клиент сначала вызывает POST /users/me.
     Остальные операции требуют регистрации (иначе 404 USER_NOT_REGISTERED).
     Пользователь определяется только по проверенному initData.
-    Все ответы персональные: Cache-Control: no-store.
+    Ответы Mini App персональные: Cache-Control: no-store.
+    Служебная ручка /internal/v1/tracked-markets использует отдельный сервисный токен,
+    не требует Telegram initData и возвращает рынки всех пользователей.
 
-    Единица отслеживания — market (монета + биржа). В текущем каталоге
-    все цены в USDT; конвертации валют нет. BIGINT и десятичные значения — строки.
+    Единица отслеживания — spot-рынок (биржа + base_asset + quote_asset).
+    Поддерживаются валюты котировки доступных биржевых пар, не только USDT.
+    Цена означает количество quote_asset за одну единицу base_asset; конвертации нет.
+    BIGINT и десятичные значения — строки. Для подписки UI собирает подпись из base_asset и quote_asset.
+    Код quote_asset передаётся отдельно: символ валюты и формат числа выбирает UI.
+    Базовая монета, валюта котировки и внешний ID сохранённого рынка неизменны;
+    для другой пары создаётся отдельная подписка.
     Поиск возвращает exchange_id и external_id для добавления, отслеживаемое — subscription_id
     для открытия карточки, удаления подписки и управления алертами.
 
-    В запланированных операциях неизвестные поля JSON/query, повторяющиеся
+    Неизвестные поля JSON/query, повторяющиеся
     query-параметры и неверные значения отклоняются с 400 VALIDATION_ERROR.
     Для JSON-тела нужен Content-Type: application/json (иначе 415).
     POST /users/me не читает тело запроса.
 
-    Пустая коллекция — items: []. Цена — результат успешного запроса текущей
-    котировки через Exchange-Data; при недоступности price: null. Ошибка отдельной
-    биржи не скрывает список и сохранённые алерты. Старое markets.price без времени
-    обновления не выдаётся за текущую цену. Метаданные свежести в ответ не входят.
+    Пустая коллекция — items: []. Список и карточка читают последнюю сохранённую
+    цену из markets.price. Для отключённой биржи price равен null.
+    Карточка также возвращает updated_at — время последней записи цены.
     Лимиты подписок и активных алертов задаются конфигурацией сервиса.
 servers:
 - {url: /api/v1}
@@ -35,6 +41,8 @@ tags:
   description: Персональный список отслеживания и карточка рынка.
 - name: Alerts
   description: Условия уведомлений для отслеживаемого рынка.
+- name: Internal
+  description: Служебные запросы Exchange-Data к API.
 security:
 - TelegramInitData: []
 paths:
@@ -63,7 +71,7 @@ paths:
     get:
       tags:
       - Markets
-      x-implementation-status: planned
+      x-implementation-status: implemented
       operationId: listExchanges
       summary: Получить активные биржи для фильтра
       responses:
@@ -96,7 +104,7 @@ paths:
       summary: Найти рынки для выпадающего списка
       description: |
         API вызывает будущую ручку поиска Exchange-Data для выбранной биржи.
-        Поиск охватывает все доступные через неё spot-инструменты с USDT,
+        Поиск охватывает все доступные через неё spot-инструменты,
         независимо от их наличия в нашей БД. Локальный список монет не ограничивает выдачу.
         Ручка поиска Exchange-Data ещё не реализована; её внутренний контракт проектируется отдельно.
         Exchange-Data сразу выполняет оба сценария поиска: eq и constraint.
@@ -105,7 +113,9 @@ paths:
         Один инструмент включается в результат один раз, даже если найден обоими сценариями.
         Пробелы по краям q удаляются; пустой q или его отсутствие возвращают каталог.
         Порядок фиксирован: external_id ASC, лексикографически. GET ничего не создаёт в БД.
-        Ответ содержит exchange_id, external_id и имя монеты без названия биржи.
+        Ответ содержит exchange_id, external_id, base_asset, quote_asset и display_name.
+        Exchange-Data получает части пары из метаданных биржи, а не разрезает external_id.
+        API формирует display_name как base_asset + "/" + quote_asset; полное имя монеты не требуется.
         UI отправляет exchange_id и external_id в POST /subscriptions;
         внутренние ID монеты и рынка для добавления не нужны.
         Уже добавленные инструменты также присутствуют: повторное добавление безопасно.
@@ -117,7 +127,7 @@ paths:
         in: query
         description: Общая строка поиска для обоих сценариев Exchange-Data; пробелы по краям удаляются.
         schema: {type: string, maxLength: 120}
-        example: Bitcoin
+        example: BTC
       - name: exchange_id
         in: query
         required: true
@@ -147,7 +157,16 @@ paths:
               schema: {$ref: '#/components/schemas/MarketPage'}
               example:
                 items:
-                - {exchange_id: 1, external_id: BTCUSDT, name: Bitcoin}
+                - exchange_id: 1
+                  external_id: BTCUSDT
+                  base_asset: BTC
+                  quote_asset: USDT
+                  display_name: BTC/USDT
+                - exchange_id: 1
+                  external_id: BTCEUR
+                  base_asset: BTC
+                  quote_asset: EUR
+                  display_name: BTC/EUR
                 next_page: null
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -158,13 +177,13 @@ paths:
     get:
       tags:
       - Subscriptions
-      x-implementation-status: planned
+      x-implementation-status: implemented
       operationId: listSubscriptions
       summary: Получить список отслеживаемых рынков
       description: |
         Все подписки текущего пользователя по subscription_id ASC, включая рынки
         отключённых бирж (для них price: null). Без пагинации: размер ограничен лимитом.
-        Каждая строка содержит только subscription_id, name, exchange_name и price.
+        Каждая строка содержит subscription_id, base_asset, quote_asset, exchange_name и price.
       responses:
         '200':
           description: Список подписок в порядке добавления. Если подписок нет, items будет пустым массивом.
@@ -174,9 +193,10 @@ paths:
               example:
                 items:
                 - subscription_id: '18'
-                  name: Bitcoin
                   exchange_name: Binance
                   price: '83781'
+                  base_asset: BTC
+                  quote_asset: USDT
         '401': {$ref: '#/components/responses/Unauthorized'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -195,26 +215,25 @@ paths:
         Новая подписка требует активной биржи и места в лимите.
 
         Если рынка ещё нет, сервер проверяет инструмент по поддерживаемому каталогу
-        Exchange-Data, получает доверенное name и начальную цену.
+        Exchange-Data, получает доверенные base_asset, quote_asset и начальную цену.
         Неизвестный/неподдерживаемый инструмент — 404 MARKET_NOT_FOUND;
         недоступный каталог — 503 MARKET_CATALOG_UNAVAILABLE; нет цены — 503 QUOTE_UNAVAILABLE.
         В транзакции повторно проверяет рынок по (exchange_id, external_id).
-        Если рынок найден — использует его и связанную монету; иначе создаёт запись
-        монеты и рынка, сохраняя external_id. Затем создаёт подписку по (user_id, market_id).
-        Имена и внешние ID разных бирж не используются для склеивания монет.
+        Если рынок найден — использует его; иначе создаёт рынок, сохраняя external_id,
+        base_asset и quote_asset. Затем создаёт подписку по (user_id, market_id).
+        Отдельная запись монеты не создаётся. Рынки разных бирж и разных валют котировки независимы.
         Ошибка не оставляет частично созданные записи. Конкурентные запросы защищены
         уникальными ключами; ID существующих объектов и их алерты сохраняются.
 
         Начальная цена обязательна только для создания рынка из-за markets.price NOT NULL.
-        Для подписки на существующий рынок доступность котировки не обязательна;
-        при её отсутствии ответ содержит price: null. Клиент не передаёт name, цену,
-        внутренний cryptocurrency_id или market_id — сервер определяет их сам.
+        Для существующего рынка ответ использует сохранённую цену, а для отключённой
+        биржи — price: null. Клиент не передаёт base_asset, quote_asset, имя или цену,
+        внутренний market_id — сервер определяет его сам.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/SubscriptionCreate'
+            schema: {$ref: '#/components/schemas/SubscriptionCreate'}
             example: {exchange_id: 1, external_id: BTCUSDT}
       responses:
         '200':
@@ -224,11 +243,12 @@ paths:
               schema: {$ref: '#/components/schemas/Subscription'}
               example:
                 subscription_id: '18'
-                name: Bitcoin
                 exchange_name: Binance
                 price: '83781'
+                base_asset: BTC
+                quote_asset: USDT
         '201':
-          description: Создана новая подписка, независимо от того, существовали ли монета и рынок до запроса.
+          description: Создана новая подписка на новый или существующий рынок.
           headers:
             Location:
               description: Путь к созданной подписке.
@@ -241,9 +261,10 @@ paths:
               schema: {$ref: '#/components/schemas/Subscription'}
               example:
                 subscription_id: '18'
-                name: Bitcoin
                 exchange_name: Binance
                 price: '83781'
+                base_asset: BTC
+                quote_asset: USDT
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -257,21 +278,20 @@ paths:
     get:
       tags:
       - Subscriptions
-      x-implementation-status: planned
+      x-implementation-status: implemented
       operationId: getSubscription
       summary: Получить карточку отслеживаемого рынка и список его алертов
       responses:
         '200':
-          description: Карточка с ценой и всеми активными/отключёнными алертами по alert_id ASC. При недоступности
-            цены price равен null.
+          description: Карточка с сохранённой ценой, временем её обновления и всеми алертами по alert_id ASC.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SubscriptionDetail'}
               example:
                 subscription_id: '18'
-                name: Bitcoin
                 exchange_name: Binance
                 price: '83781'
+                updated_at: '2026-11-09T08:30:00Z'
                 alerts:
                 - alert_id: '9'
                   type: percent
@@ -288,6 +308,8 @@ paths:
                   value: '83000'
                   target_price: '83000'
                   is_active: true
+                base_asset: BTC
+                quote_asset: USDT
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -321,8 +343,8 @@ paths:
       operationId: listSubscriptionAlerts
       summary: Получить все алерты подписки
       description: |
-        Тот же список, что в SubscriptionDetail.alerts: активные и отключённые,
-        по alert_id ASC. Нужен для обновления алертов без повторной загрузки карточки.
+        Все активные и отключённые алерты по alert_id ASC. В самостоятельном ответе
+        каждый алерт содержит quote_asset. Нужен для обновления алертов без повторной загрузки карточки.
         Без пагинации. Цена и доступность биржи не влияют на чтение сохранённых условий.
       responses:
         '200':
@@ -340,16 +362,19 @@ paths:
                       value: '5'
                       target_price: '87970.05'
                       is_active: true
+                      quote_asset: USDT
                     - alert_id: '10'
                       type: percent
                       value: '-5'
                       target_price: '79591.95'
                       is_active: false
+                      quote_asset: USDT
                     - alert_id: '11'
                       type: price
                       value: '83000'
                       target_price: '83000'
                       is_active: true
+                      quote_asset: USDT
                 empty:
                   summary: Алерты ещё не созданы
                   value:
@@ -368,12 +393,14 @@ paths:
       description: |
         Клиент передаёт только type и value. Сервер получает текущую цену через
         Exchange-Data и сохраняет её в существующей alerts.reference_price.
-        Для price value — положительная целевая цена: target_price = value.
+        Для price value — положительная целевая цена в quote_asset подписки: target_price = value.
+        reference_price и target_price также измеряются в quote_asset. Код валюты берётся из рынка,
+        клиент не может задать или поменять его в запросе алерта.
         Цель выше reference_price означает рост, ниже — падение; равная цена запрещена (400).
         Для percent value — знаковое изменение: "5" означает рост на 5%, "-5" — падение на 5%.
         target_price = reference_price * (1 + value / 100).
         Нулевой процент и падение на 100% или больше запрещены.
-        Целевая цена должна быть в (0; 500000]. Вычисления десятичные, без float64.
+        Целевая цена должна быть в (0; 500000] единиц quote_asset (текущий лимит, без пересчёта в USD). Вычисления десятичные, без float64.
         Направление не передаётся и не хранится отдельно; оно определяется по сохранённой
         базовой цене и цели, а не по текущей цене при чтении.
         Требуются активная биржа, текущая котировка и место в лимите активных алертов.
@@ -414,6 +441,7 @@ paths:
                 value: '5'
                 target_price: '87970.05'
                 is_active: true
+                quote_asset: USDT
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -469,6 +497,7 @@ paths:
                 value: '5'
                 target_price: '87970.05'
                 is_active: false
+                quote_asset: USDT
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -493,8 +522,74 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /internal/v1/tracked-markets:
+    servers:
+    - {url: /}
+    get:
+      tags: [Internal]
+      x-implementation-status: planned
+      operationId: listTrackedMarkets
+      summary: Получить рынки всех пользователей для опроса бирж
+      security:
+      - ServiceToken: []
+      description: |
+        Exchange-Data вызывает GET /internal/v1/tracked-markets в API по расписанию.
+        API читает БД и возвращает полный текущий список рынков активных бирж,
+        на которые есть хотя бы одна подписка. Пользователь и наличие активных алертов
+        не ограничивают выборку. Рынок включается один раз независимо от числа подписок.
+        Используется EXISTS по subscriptions.market_id, без размножения строк JOIN-ом.
+        Биржи без отслеживаемых рынков не включаются. Порядок: exchange_id ASC, market_id ASC.
+        Для MVP ответ без пагинации; это единая выборка на момент чтения, Cache-Control: no-store.
+        Пустой результат — 200 с items: []; ошибка БД — 503, а не пустая коллекция.
+
+        Exchange-Data обращается к биржам с external_id в их исходном формате,
+        затем публикует изменённые цены в Kafka (Price-Checked-Topic).
+        Tracking читает эти события и проверяет алерты соответствующего рынка.
+        market_id служит идентификатором рынка для связи события с подписками;
+        BTC/USDT и BTC/EUR имеют разные market_id, даже на одной бирже.
+        Схема Kafka-события описывается отдельно от этого HTTP-контракта.
+        Эта ручка только читает список: цены через неё не принимаются и не обновляются.
+        Telegram-регистрация не требуется; сервисный токен проверяется отдельно.
+      responses:
+        '200':
+          description: Полный список отслеживаемых рынков, сгруппированный по бирже.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrackedMarketList'}
+              example:
+                items:
+                - exchange_id: 1
+                  markets:
+                  - {market_id: '42', external_id: BTCUSDT}
+                  - {market_id: '43', external_id: BTCEUR}
+                - exchange_id: 3
+                  markets:
+                  - {market_id: '44', external_id: BTC-USDT}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401':
+          description: SERVICE_AUTH_INVALID — сервисный токен отсутствует или неверен.
+          headers:
+            WWW-Authenticate:
+              schema: {type: string, const: Bearer}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example:
+                error: {code: SERVICE_AUTH_INVALID, message: Missing or invalid service token}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          description: SERVICE_UNAVAILABLE — БД или настройка сервисной авторизации недоступна.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example:
+                error: {code: SERVICE_UNAVAILABLE, message: Service temporarily unavailable}
 components:
   securitySchemes:
+    ServiceToken:
+      type: http
+      scheme: bearer
+      description: Сервисный секрет Exchange-Data для Authorization Bearer; проверяется API, не является Telegram initData.
     TelegramInitData:
       type: apiKey
       in: header
@@ -558,12 +653,31 @@ components:
         TELEGRAM_AUTH_UNAVAILABLE — не настроена авторизация; SERVICE_UNAVAILABLE —
         недоступно обязательное хранилище; MARKET_CATALOG_UNAVAILABLE — недоступен каталог
         инструментов для поиска или создания нового рынка; QUOTE_UNAVAILABLE — не удалось
-        получить текущую цену для создания рынка или создания/изменения/включения алерта. Чтение при отсутствии
-        котировки возвращает 200 с price: null, а не QUOTE_UNAVAILABLE.
+        получить текущую цену для создания рынка или создания/изменения/включения алерта.
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    TrackedMarketList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [exchange_id, markets]
+            properties:
+              exchange_id: {$ref: '#/components/schemas/ExchangeId'}
+              markets:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  required: [market_id, external_id]
+                  properties:
+                    market_id: {$ref: '#/components/schemas/Id'}
+                    external_id: {$ref: '#/components/schemas/ExternalInstrumentId'}
     Id:
       type: string
       pattern: ^[1-9][0-9]{0,18}$
@@ -624,7 +738,8 @@ components:
       allOf:
       - {$ref: '#/components/schemas/PositiveDecimal'}
       - {pattern: '^((0|[1-9][0-9]{0,4}|[1-4][0-9]{5})(\.[0-9]+)?|500000(\.0+)?)$'}
-      description: Цена в USDT в диапазоне (0; 500000].
+      description: Значение в диапазоне (0; 500000]. Для цены/цели измеряется в quote_asset рынка; лимит пока одинаков
+        численно для всех валют, без конвертации.
     PercentValue:
       allOf:
       - {$ref: '#/components/schemas/Decimal'}
@@ -639,28 +754,36 @@ components:
       required:
       - exchange_id
       - external_id
-      - name
+      - base_asset
+      - quote_asset
+      - display_name
       properties:
         exchange_id: {$ref: '#/components/schemas/ExchangeId'}
         external_id: {$ref: '#/components/schemas/ExternalInstrumentId'}
-        name:
+        base_asset: {$ref: '#/components/schemas/AssetCode'}
+        quote_asset: {$ref: '#/components/schemas/AssetCode'}
+        display_name:
           type: string
-          description: Имя монеты для UI без названия биржи; не используется как идентификатор.
+          description: 'Готовая подпись: base_asset + "/" + quote_asset, без пробелов и биржи. Не используется как
+            ключ.'
           examples:
-          - Bitcoin
+          - BTC/USDT
+          - BTC/EUR
     ExternalInstrumentId:
       type: string
       minLength: 1
       maxLength: 255
-      pattern: '^[^\s]+$(?![\s\S])'
+      pattern: ^[^\s]+$(?![\s\S])
       description: |
         Идентификатор инструмента, полученный от биржи через Exchange-Data.
         Сохраняется в markets.external_id при добавлении; внутренние BIGSERIAL ID не заменяет.
-        У Binance это symbol, например BTCUSDT. Уникален только вместе с exchange_id
-        в поддерживаемом spot/USDT-каталоге. UI передаёт строку из поиска без изменения;
+        Исходный формат биржи сохраняется: например BTCUSDT либо BTC-USDT. Уникален только вместе с exchange_id
+        в поддерживаемом spot-каталоге. UI передаёт строку из поиска без изменения;
         регистр значим, преобразования и разбор символа на клиенте не нужны.
       examples:
       - BTCUSDT
+      - BTC-USDT
+      - BTCEUR
     SubscriptionCreate:
       type: object
       required:
@@ -691,18 +814,16 @@ components:
       type: object
       required:
       - subscription_id
-      - name
+      - base_asset
+      - quote_asset
       - exchange_name
       - price
       properties:
         subscription_id:
           $ref: '#/components/schemas/Id'
           description: ID подписки, используемый в путях карточки, удаления и алертов.
-        name:
-          type: string
-          description: cryptocurrencies.name
-          examples:
-          - Bitcoin
+        base_asset: {$ref: '#/components/schemas/AssetCode'}
+        quote_asset: {$ref: '#/components/schemas/AssetCode'}
         exchange_name:
           type: string
           examples:
@@ -711,7 +832,7 @@ components:
           oneOf:
           - {$ref: '#/components/schemas/PositiveDecimal'}
           - {type: 'null'}
-          description: Текущая цена в USDT или null, если её не удалось получить. На отключённой бирже всегда null.
+          description: Последняя сохранённая цена в quote_asset за единицу base_asset. Для отключённой биржи — null.
     SubscriptionList:
       type: object
       required:
@@ -725,11 +846,16 @@ components:
       - {$ref: '#/components/schemas/Subscription'}
       - type: object
         required:
+        - updated_at
         - alerts
         properties:
+          updated_at:
+            type: string
+            format: date-time
+            description: Время записи последней цены рынка в UTC. До первого обновления совпадает со временем создания рынка.
           alerts:
             type: array
-            items: {$ref: '#/components/schemas/Alert'}
+            items: {$ref: '#/components/schemas/SubscriptionAlert'}
     AlertType:
       type: string
       enum:
@@ -780,7 +906,7 @@ components:
         - type
         - value
       description: Только is_active либо полный набор type, value с необязательным is_active.
-    Alert:
+    SubscriptionAlert:
       type: object
       required:
       - alert_id
@@ -794,7 +920,7 @@ components:
         value: {$ref: '#/components/schemas/Decimal'}
         target_price:
           $ref: '#/components/schemas/PriceValue'
-          description: Готовая целевая цена в USDT для отображения на UI, вычисленная сервером.
+          description: Целевая цена в валюте котировки подписки, вычисленная сервером.
         is_active: {type: boolean}
       allOf:
       - {$ref: '#/components/schemas/AlertValueRules'}
@@ -806,6 +932,13 @@ components:
         previous > target >= current. Срабатывание не выключает алерт;
         повтор возможен только после возврата и нового пересечения.
         is_active отражает настройку пользователя, а не доступность биржи или доставку.
+    Alert:
+      allOf:
+      - {$ref: '#/components/schemas/SubscriptionAlert'}
+      - type: object
+        required: [quote_asset]
+        properties:
+          quote_asset: {$ref: '#/components/schemas/AssetCode'}
     AlertList:
       type: object
       required:
@@ -814,3 +947,13 @@ components:
         items:
           type: array
           items: {$ref: '#/components/schemas/Alert'}
+    AssetCode:
+      type: string
+      minLength: 1
+      maxLength: 32
+      pattern: ^[^\s/]+$(?![\s\S])
+      description: Код актива из метаданных биржи, например BTC, USDT или EUR. Не значок валюты.
+      examples:
+      - BTC
+      - USDT
+      - EUR

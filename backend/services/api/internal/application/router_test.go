@@ -16,7 +16,9 @@ import (
 	"testing"
 	"time"
 
+	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
 	domainusers "marketmind/api/internal/domain/users"
+	subscriptionhandlers "marketmind/api/internal/handlers/subscriptions"
 	userhandlers "marketmind/api/internal/handlers/users"
 )
 
@@ -24,6 +26,10 @@ type registerUserStub func(context.Context, domainusers.User) error
 
 func (s registerUserStub) Register(ctx context.Context, user domainusers.User) error {
 	return s(ctx, user)
+}
+
+func (s registerUserStub) Exists(context.Context, int64) (bool, error) {
+	return true, nil
 }
 
 func TestRegisterUserRouteUsesSignedTelegramID(t *testing.T) {
@@ -36,21 +42,11 @@ func TestRegisterUserRouteUsesSignedTelegramID(t *testing.T) {
 		}
 		return nil
 	})
-	router := NewRouter(logger, userhandlers.NewHandler(repository, logger), botToken)
+	router := NewRouter(logger, botToken, userhandlers.NewHandler(repository, logger), nil, nil)
 
 	userID := strconv.FormatInt(telegramUserID, 10)
-	fields := url.Values{
-		"auth_date": {strconv.FormatInt(time.Now().Unix(), 10)},
-		"user":      {`{"id":` + userID + `}`},
-	}
-	secret := hmac.New(sha256.New, []byte("WebAppData"))
-	_, _ = secret.Write([]byte(botToken))
-	signature := hmac.New(sha256.New, secret.Sum(nil))
-	_, _ = signature.Write([]byte("auth_date=" + fields.Get("auth_date") + "\nuser=" + fields.Get("user")))
-	fields.Set("hash", hex.EncodeToString(signature.Sum(nil)))
-
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me", strings.NewReader(`{"telegram_user_id":"999"}`))
-	req.Header.Set("Authorization", "tma "+fields.Encode())
+	req.Header.Set("Authorization", signedTelegramHeader(botToken, telegramUserID))
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 
@@ -63,5 +59,66 @@ func TestRegisterUserRouteUsesSignedTelegramID(t *testing.T) {
 	}
 	if len(body) != 1 || body["telegram_user_id"] != userID {
 		t.Fatalf("unexpected response: %s", res.Body)
+	}
+}
+
+func signedTelegramHeader(botToken string, telegramUserID int64) string {
+	fields := url.Values{
+		"auth_date": {strconv.FormatInt(time.Now().Unix(), 10)},
+		"user":      {`{"id":` + strconv.FormatInt(telegramUserID, 10) + `}`},
+	}
+	secret := hmac.New(sha256.New, []byte("WebAppData"))
+	_, _ = secret.Write([]byte(botToken))
+	signature := hmac.New(sha256.New, secret.Sum(nil))
+	_, _ = signature.Write([]byte("auth_date=" + fields.Get("auth_date") + "\nuser=" + fields.Get("user")))
+	fields.Set("hash", hex.EncodeToString(signature.Sum(nil)))
+	return "tma " + fields.Encode()
+}
+
+type subscriptionReaderStub struct {
+	domainsubscriptions.Repository
+	get func(context.Context, int64, int64) (domainsubscriptions.Detail, error)
+}
+
+func (s subscriptionReaderStub) Get(ctx context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
+	return s.get(ctx, telegramUserID, subscriptionID)
+}
+
+func TestSubscriptionDetailRoute(t *testing.T) {
+	const botToken = "test-token"
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	reader := subscriptionReaderStub{get: func(_ context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
+		if telegramUserID != 123 || subscriptionID != 18 {
+			t.Fatalf("unexpected subscription lookup: Telegram user %d, subscription %d", telegramUserID, subscriptionID)
+		}
+		price := "83781.00000000000001"
+		return domainsubscriptions.Detail{
+			Subscription: domainsubscriptions.Subscription{
+				ID: 18, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance", Price: &price,
+			},
+			UpdatedAt: time.Date(2026, 11, 9, 11, 30, 0, 0, time.FixedZone("UTC+3", 3*60*60)),
+			Alerts:    []domainsubscriptions.Alert{{ID: 9, Type: "percent", Value: "5", TargetPrice: "87970.05", IsActive: true}},
+		}, nil
+	}}
+	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil,
+		subscriptionhandlers.NewHandler(reader, logger))
+
+	for _, tc := range []struct {
+		path   string
+		status int
+		body   string
+	}{
+		{"/api/v1/subscriptions/18", http.StatusOK,
+			`{"subscription_id":"18","base_asset":"BTC","quote_asset":"USDT","exchange_name":"Binance","price":"83781.00000000000001","updated_at":"2026-11-09T08:30:00Z","alerts":[{"alert_id":"9","type":"percent","value":"5","target_price":"87970.05","is_active":true}]}`},
+		{"/api/v1/subscriptions/018", http.StatusBadRequest,
+			`{"error":{"code":"VALIDATION_ERROR","message":"Invalid subscription ID"}}`},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		req.Header.Set("Authorization", signedTelegramHeader(botToken, 123))
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		if res.Code != tc.status || strings.TrimSpace(res.Body.String()) != tc.body {
+			t.Fatalf("%s returned status %d and body %s", tc.path, res.Code, res.Body)
+		}
 	}
 }

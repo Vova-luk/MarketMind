@@ -28,3 +28,14 @@ func (r *Repository) Register(ctx context.Context, user domainusers.User) error 
 	}
 	return nil
 }
+
+func (r *Repository) Exists(ctx context.Context, telegramUserID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM market_mind.users WHERE telegram_user_id = $1)
+	`, telegramUserID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("look up Telegram user: %w", err)
+	}
+	return exists, nil
+}

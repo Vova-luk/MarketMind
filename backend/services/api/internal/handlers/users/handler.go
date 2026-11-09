@@ -36,3 +36,26 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		TelegramUserID: user.TelegramUserID,
 	})
 }
+
+func (h *Handler) RequireRegistered(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		telegramUserID, ok := requestctx.TelegramUserID(ctx)
+		if !ok {
+			w.Header().Set("WWW-Authenticate", "tma")
+			httpresponse.WriteError(w, http.StatusUnauthorized, "TELEGRAM_AUTH_INVALID", "Missing or invalid Telegram initData")
+			return
+		}
+		exists, err := h.repository.Exists(ctx, telegramUserID)
+		if err != nil {
+			h.logger.ErrorContext(ctx, "check user registration", "error", err)
+			httpresponse.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Could not check user registration")
+			return
+		}
+		if !exists {
+			httpresponse.WriteError(w, http.StatusNotFound, "USER_NOT_REGISTERED", "User is not registered")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
