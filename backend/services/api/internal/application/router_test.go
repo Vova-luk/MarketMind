@@ -42,7 +42,7 @@ func TestRegisterUserRouteUsesSignedTelegramID(t *testing.T) {
 		}
 		return nil
 	})
-	router := NewRouter(logger, botToken, userhandlers.NewHandler(repository, logger), nil, nil)
+	router := NewRouter(logger, botToken, userhandlers.NewHandler(repository, logger), nil, nil, nil)
 
 	userID := strconv.FormatInt(telegramUserID, 10)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me", strings.NewReader(`{"telegram_user_id":"999"}`))
@@ -101,7 +101,7 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 		}, nil
 	}}
 	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil,
-		subscriptionhandlers.NewHandler(reader, logger))
+		subscriptionhandlers.NewHandler(reader, logger), nil)
 
 	for _, tc := range []struct {
 		path   string

@@ -4,13 +4,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
-
-	"github.com/go-chi/chi"
 
 	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
 	"marketmind/api/internal/httpresponse"
 	"marketmind/api/internal/requestctx"
+	"marketmind/api/internal/requestparams"
 )
 
 type Handler struct {
@@ -43,9 +41,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	rawID := chi.URLParam(r, "subscription_id")
-	subscriptionID, err := strconv.ParseInt(rawID, 10, 64)
-	if err != nil || subscriptionID <= 0 || strconv.FormatInt(subscriptionID, 10) != rawID {
+	subscriptionID, ok := requestparams.PathID(r, "subscription_id")
+	if !ok {
 		httpresponse.WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid subscription ID")
 		return
 	}
@@ -62,4 +59,25 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.WriteJSON(w, http.StatusOK, toDetailResponse(detail))
+}
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	subscriptionID, ok := requestparams.PathID(r, "subscription_id")
+	if !ok {
+		httpresponse.WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid subscription ID")
+		return
+	}
+	ctx := r.Context()
+	telegramUserID, _ := requestctx.TelegramUserID(ctx)
+	err := h.repository.Delete(ctx, telegramUserID, subscriptionID)
+	if errors.Is(err, domainsubscriptions.ErrNotFound) {
+		httpresponse.WriteError(w, http.StatusNotFound, "SUBSCRIPTION_NOT_FOUND", "Subscription not found")
+		return
+	}
+	if err != nil {
+		h.logger.ErrorContext(ctx, "delete subscription", "error", err)
+		httpresponse.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Could not delete subscription")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

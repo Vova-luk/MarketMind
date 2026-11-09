@@ -5,13 +5,16 @@ import (
 	"fmt"
 
 	"marketmind/api/internal/config"
+	alerthandlers "marketmind/api/internal/handlers/alerts"
 	exchangehandlers "marketmind/api/internal/handlers/exchanges"
 	subscriptionhandlers "marketmind/api/internal/handlers/subscriptions"
 	userhandlers "marketmind/api/internal/handlers/users"
+	alertrepository "marketmind/api/internal/repository/alerts"
 	exchangerepository "marketmind/api/internal/repository/exchanges"
 	subscriptionrepository "marketmind/api/internal/repository/subscriptions"
 	userrepository "marketmind/api/internal/repository/users"
 	"marketmind/api/internal/server"
+	alertservice "marketmind/api/internal/service/alerts"
 	"marketmind/utils/logger"
 	"marketmind/utils/migrator"
 	"marketmind/utils/postgres"
@@ -67,7 +70,8 @@ func (a *Application) initRouter() {
 	users := userhandlers.NewHandler(userrepository.NewRepository(a.database), a.logger)
 	exchanges := exchangehandlers.NewHandler(exchangerepository.NewRepository(a.database), a.logger)
 	subscriptions := subscriptionhandlers.NewHandler(subscriptionrepository.NewRepository(a.database), a.logger)
-	a.router = NewRouter(a.logger, a.config.String("telegram.bot_token"), users, exchanges, subscriptions)
+	alerts := alertservice.NewService(alertrepository.NewRepository(a.database), a.config.Int("alerts.active_limit"))
+	a.router = NewRouter(a.logger, a.config.String("telegram.bot_token"), users, exchanges, subscriptions, alerthandlers.NewHandler(alerts, a.logger))
 }
 
 func (a *Application) initServer() error {
