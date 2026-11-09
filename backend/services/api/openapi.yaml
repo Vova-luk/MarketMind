@@ -18,7 +18,7 @@ info:
     Код quote_asset передаётся отдельно: символ валюты и формат числа выбирает UI.
     Базовая монета, валюта котировки и внешний ID сохранённого рынка неизменны;
     для другой пары создаётся отдельная подписка.
-    Поиск возвращает exchange_id и external_id для добавления, отслеживаемое — subscription_id
+    UI передаёт выбранный результат поиска для добавления. Отслеживаемое возвращает subscription_id
     для открытия карточки, удаления подписки и управления алертами.
 
     Неизвестные поля JSON/query, повторяющиеся
@@ -30,6 +30,7 @@ info:
     цену из markets.price. Для отключённой биржи price равен null.
     Карточка также возвращает updated_at — время последней записи цены.
     Лимиты подписок и активных алертов задаются конфигурацией сервиса.
+    Лимит подписок на пользователя задаётся через subscriptions.limit (по умолчанию 50).
     Лимит активных алертов применяется ко всем подпискам пользователя (alerts.active_limit, по умолчанию 50).
 servers:
 - {url: /api/v1}
@@ -114,11 +115,11 @@ paths:
         Один инструмент включается в результат один раз, даже если найден обоими сценариями.
         Пробелы по краям q удаляются; пустой q или его отсутствие возвращают каталог.
         Порядок фиксирован: external_id ASC, лексикографически. GET ничего не создаёт в БД.
-        Ответ содержит exchange_id, external_id, base_asset, quote_asset и display_name.
+        Ответ содержит exchange_id, external_id, base_asset, quote_asset, display_name и price.
         Exchange-Data получает части пары из метаданных биржи, а не разрезает external_id.
         API формирует display_name как base_asset + "/" + quote_asset; полное имя монеты не требуется.
-        UI отправляет exchange_id и external_id в POST /subscriptions;
-        внутренние ID монеты и рынка для добавления не нужны.
+        UI передаёт выбранный объект целиком в POST /subscriptions.
+        Если цена недоступна, price равен null. Для первого сохранения рынка требуется положительная цена.
         Уже добавленные инструменты также присутствуют: повторное добавление безопасно.
         Неизвестная/отключённая exchange_id — 404 EXCHANGE_NOT_FOUND.
         Недоступность каталога — 503 MARKET_CATALOG_UNAVAILABLE, а не пустой список.
@@ -163,11 +164,13 @@ paths:
                   base_asset: BTC
                   quote_asset: USDT
                   display_name: BTC/USDT
+                  price: '83781.50'
                 - exchange_id: 1
                   external_id: BTCEUR
                   base_asset: BTC
                   quote_asset: EUR
                   display_name: BTC/EUR
+                  price: '77000'
                 next_page: null
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -206,7 +209,7 @@ paths:
     post:
       tags:
       - Subscriptions
-      x-implementation-status: planned
+      x-implementation-status: implemented
       operationId: addSubscription
       summary: Добавить рынок в отслеживаемое
       description: |
@@ -215,27 +218,36 @@ paths:
         даже при отключённой бирже, исчерпанном лимите или недоступном каталоге/котировке.
         Новая подписка требует активной биржи и места в лимите.
 
-        Если рынка ещё нет, сервер проверяет инструмент по поддерживаемому каталогу
-        Exchange-Data, получает доверенные base_asset, quote_asset и начальную цену.
-        Неизвестный/неподдерживаемый инструмент — 404 MARKET_NOT_FOUND;
-        недоступный каталог — 503 MARKET_CATALOG_UNAVAILABLE; нет цены — 503 QUOTE_UNAVAILABLE.
-        В транзакции повторно проверяет рынок по (exchange_id, external_id).
-        Если рынок найден — использует его; иначе создаёт рынок, сохраняя external_id,
-        base_asset и quote_asset. Затем создаёт подписку по (user_id, market_id).
-        Отдельная запись монеты не создаётся. Рынки разных бирж и разных валют котировки независимы.
-        Ошибка не оставляет частично созданные записи. Конкурентные запросы защищены
-        уникальными ключами; ID существующих объектов и их алерты сохраняются.
-
-        Начальная цена обязательна только для создания рынка из-за markets.price NOT NULL.
-        Для существующего рынка ответ использует сохранённую цену, а для отключённой
-        биржи — price: null. Клиент не передаёт base_asset, quote_asset, имя или цену,
-        внутренний market_id — сервер определяет его сам.
+        Для нового рынка UI передаёт base_asset, quote_asset и price из результата поиска.
+        API проверяет формат полей и использует цену как начальную. Поле display_name
+        можно передать вместе с объектом поиска, при сохранении оно игнорируется.
+        Имя биржи берётся из БД. POST сохраняет данные без обращения к Exchange-Data.
+        Если для нового рынка отсутствуют коды активов или положительная цена,
+        сервер возвращает 400 VALIDATION_ERROR.
+        Неизвестная биржа — 404 EXCHANGE_NOT_FOUND.
+        Запись рынка и подписки выполняется атомарно. При параллельном добавлении
+        используется сохранённый рынок. Если та же пара сохранена под другим внешним
+        ID на этой бирже, возвращается 409 MARKET_CONFLICT.
+        Для существующего рынка API использует цену из БД, а для отключённой биржи
+        возвращает price: null. Размер JSON-тела — до 8 КиБ.
       requestBody:
         required: true
         content:
           application/json:
             schema: {$ref: '#/components/schemas/SubscriptionCreate'}
-            example: {exchange_id: 1, external_id: BTCUSDT}
+            examples:
+              existing:
+                summary: Рынок уже сохранён
+                value: {exchange_id: 1, external_id: BTCUSDT}
+              selected:
+                summary: Выбранный результат поиска для первого добавления
+                value:
+                  exchange_id: 1
+                  external_id: BTCUSDT
+                  base_asset: BTC
+                  quote_asset: USDT
+                  display_name: BTC/USDT
+                  price: '83781.50'
       responses:
         '200':
           description: Подписка уже существует.
@@ -634,7 +646,7 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
     Conflict:
-      description: EXCHANGE_INACTIVE, SUBSCRIPTION_LIMIT_REACHED или ACTIVE_ALERT_LIMIT_REACHED. Лимиты проверяются
+      description: EXCHANGE_INACTIVE, SUBSCRIPTION_LIMIT_REACHED, ACTIVE_ALERT_LIMIT_REACHED или MARKET_CONFLICT. Лимиты проверяются
         атомарно при создании/включении; чтение, удаление и отключение доступны.
       content:
         application/json:
@@ -758,6 +770,7 @@ components:
       - base_asset
       - quote_asset
       - display_name
+      - price
       properties:
         exchange_id: {$ref: '#/components/schemas/ExchangeId'}
         external_id: {$ref: '#/components/schemas/ExternalInstrumentId'}
@@ -770,6 +783,9 @@ components:
           examples:
           - BTC/USDT
           - BTC/EUR
+        price:
+          $ref: '#/components/schemas/MarketSearchPrice'
+          description: Цена на момент поиска в quote_asset. При недоступности котировки — null.
     ExternalInstrumentId:
       type: string
       minLength: 1
@@ -794,6 +810,18 @@ components:
       properties:
         exchange_id: {$ref: '#/components/schemas/ExchangeId'}
         external_id: {$ref: '#/components/schemas/ExternalInstrumentId'}
+        base_asset: {$ref: '#/components/schemas/AssetCode'}
+        quote_asset: {$ref: '#/components/schemas/AssetCode'}
+        display_name:
+          type: string
+          description: Подпись из поиска. При сохранении игнорируется.
+        price: {$ref: '#/components/schemas/MarketSearchPrice'}
+      description: Для первой записи рынка нужны base_asset, quote_asset и положительная price.
+    MarketSearchPrice:
+      oneOf:
+      - $ref: '#/components/schemas/PositiveDecimal'
+        maxLength: 256
+      - {type: 'null'}
     MarketPage:
       type: object
       required:

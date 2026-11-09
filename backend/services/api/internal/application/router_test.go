@@ -101,7 +101,7 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 		}, nil
 	}}
 	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil,
-		subscriptionhandlers.NewHandler(reader, logger), nil)
+		subscriptionhandlers.NewHandler(reader, nil, logger), nil)
 
 	for _, tc := range []struct {
 		path   string

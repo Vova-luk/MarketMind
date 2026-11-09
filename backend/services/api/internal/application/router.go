@@ -27,6 +27,7 @@ func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler,
 			registered.Use(userHandler.RequireRegistered, rejectQueryParameters)
 			registered.Get("/exchanges", exchangeHandler.List)
 			registered.Get("/subscriptions", subscriptionHandler.List)
+			registered.Post("/subscriptions", subscriptionHandler.Add)
 			registered.Get("/subscriptions/{subscription_id}", subscriptionHandler.Get)
 			registered.Delete("/subscriptions/{subscription_id}", subscriptionHandler.Delete)
 			registered.Post("/subscriptions/{subscription_id}/alerts", alertHandler.Create)

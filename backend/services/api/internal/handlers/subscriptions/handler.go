@@ -9,15 +9,17 @@ import (
 	"marketmind/api/internal/httpresponse"
 	"marketmind/api/internal/requestctx"
 	"marketmind/api/internal/requestparams"
+	subscriptionservice "marketmind/api/internal/service/subscriptions"
 )
 
 type Handler struct {
 	repository domainsubscriptions.Repository
+	service    *subscriptionservice.Service
 	logger     *slog.Logger
 }
 
-func NewHandler(repository domainsubscriptions.Repository, logger *slog.Logger) *Handler {
-	return &Handler{repository: repository, logger: logger}
+func NewHandler(repository domainsubscriptions.Repository, service *subscriptionservice.Service, logger *slog.Logger) *Handler {
+	return &Handler{repository: repository, service: service, logger: logger}
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {

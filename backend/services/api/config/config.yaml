@@ -23,3 +23,6 @@ database:
 
 alerts:
   active_limit: 50
+
+subscriptions:
+  limit: 50
