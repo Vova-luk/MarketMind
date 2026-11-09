@@ -8,13 +8,14 @@ import (
 
 	"marketmind/api/internal/handlers/alerts"
 	"marketmind/api/internal/handlers/exchanges"
+	"marketmind/api/internal/handlers/markets"
 	"marketmind/api/internal/handlers/subscriptions"
 	"marketmind/api/internal/handlers/users"
 	"marketmind/api/internal/httpresponse"
 	"marketmind/api/internal/middleware"
 )
 
-func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler, exchangeHandler *exchanges.Handler, subscriptionHandler *subscriptions.Handler, alertHandler *alerts.Handler) *chi.Mux {
+func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler, exchangeHandler *exchanges.Handler, subscriptionHandler *subscriptions.Handler, alertHandler *alerts.Handler, marketHandler *markets.Handler) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestLogger(logger))
 	router.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -23,6 +24,7 @@ func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler,
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.AuthenticateTelegram(botToken))
 		api.Post("/users/me", userHandler.Register)
+		api.With(userHandler.RequireRegistered).Get("/markets", marketHandler.Search)
 		api.Group(func(registered chi.Router) {
 			registered.Use(userHandler.RequireRegistered, rejectQueryParameters)
 			registered.Get("/exchanges", exchangeHandler.List)

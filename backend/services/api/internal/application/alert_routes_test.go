@@ -74,7 +74,7 @@ func TestAlertMutationRoutes(t *testing.T) {
 		Price: "83781.00000000000001", QuoteAsset: "USDT", ExchangeActive: true,
 	}}
 	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil, nil,
-		alerthandlers.NewHandler(alertservice.NewService(store, 1), nil, logger))
+		alerthandlers.NewHandler(alertservice.NewService(store, 1), nil, logger), nil)
 	request := func(method, path, body string, userID int64, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))

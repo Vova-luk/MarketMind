@@ -101,22 +101,20 @@ paths:
     get:
       tags:
       - Markets
-      x-implementation-status: planned
+      x-implementation-status: implemented
       operationId: searchMarkets
       summary: Найти рынки для выпадающего списка
       description: |
-        API вызывает будущую ручку поиска Exchange-Data для выбранной биржи.
-        Поиск охватывает все доступные через неё spot-инструменты,
-        независимо от их наличия в нашей БД. Локальный список монет не ограничивает выдачу.
-        Ручка поиска Exchange-Data ещё не реализована; её внутренний контракт проектируется отдельно.
-        Exchange-Data сразу выполняет оба сценария поиска: eq и constraint.
-        Они возвращают единый список; режим поиска не передаётся ни клиентом,
-        ни API при обращении к Exchange-Data. API не делает два отдельных запроса.
+        Сейчас источник данных — фиксированный тестовый каталог с демонстрационными ценами.
+        Для активной биржи заглушка ищет в каталоге без учёта регистра по внешнему ID
+        и подписи пары. Инструменты возвращаются независимо от наличия в нашей БД.
+        При подключении Exchange-Data источник будет выполнять оба сценария поиска,
+        eq и constraint, за один вызов с общей строкой q.
         Один инструмент включается в результат один раз, даже если найден обоими сценариями.
         Пробелы по краям q удаляются; пустой q или его отсутствие возвращают каталог.
         Порядок фиксирован: external_id ASC, лексикографически. GET ничего не создаёт в БД.
         Ответ содержит exchange_id, external_id, base_asset, quote_asset, display_name и price.
-        Exchange-Data получает части пары из метаданных биржи, а не разрезает external_id.
+        Источник передаёт коды активов отдельно.
         API формирует display_name как base_asset + "/" + quote_asset; полное имя монеты не требуется.
         UI передаёт выбранный объект целиком в POST /subscriptions.
         Если цена недоступна, price равен null. Для первого сохранения рынка требуется положительная цена.
@@ -160,17 +158,17 @@ paths:
               example:
                 items:
                 - exchange_id: 1
-                  external_id: BTCUSDT
-                  base_asset: BTC
-                  quote_asset: USDT
-                  display_name: BTC/USDT
-                  price: '83781.50'
-                - exchange_id: 1
                   external_id: BTCEUR
                   base_asset: BTC
                   quote_asset: EUR
                   display_name: BTC/EUR
                   price: '77000'
+                - exchange_id: 1
+                  external_id: BTCUSDT
+                  base_asset: BTC
+                  quote_asset: USDT
+                  display_name: BTC/USDT
+                  price: '83781.50'
                 next_page: null
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}

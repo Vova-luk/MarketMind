@@ -68,7 +68,7 @@ func TestAddSubscriptionAcceptsSearchResultAndReusesMarket(t *testing.T) {
 	store := &subscriptionAddStore{owners: make(map[int64]int64)}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	handler := subscriptionhandlers.NewHandler(nil, subscriptionservice.NewService(store, 50), logger)
-	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil, handler, nil)
+	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil, handler, nil, nil)
 	post := func(userID int64, body map[string]any, status int, wantBody string) *httptest.ResponseRecorder {
 		t.Helper()
 		data, err := json.Marshal(body)

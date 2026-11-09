@@ -1,6 +1,11 @@
 package exchanges
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var ErrNotFound = errors.New("active exchange not found")
 
 type Exchange struct {
 	ID   int32
