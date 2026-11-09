@@ -30,8 +30,22 @@ type GRPCConfig struct {
 }
 
 type KafkaConfig struct {
-	Brokers     []string `yaml:"brokers"`
-	OutputTopic string   `yaml:"output_topic"`
+	Brokers           string `yaml:"brokers"`
+	PriceCheckedTopic string `yaml:"price_checked_topic"`
+}
+
+func (c KafkaConfig) BrokerList() []string {
+	parts := strings.Split(c.Brokers, ",")
+	brokers := make([]string, 0, len(parts))
+
+	for _, broker := range parts {
+		broker = strings.TrimSpace(broker)
+		if broker != "" {
+			brokers = append(brokers, broker)
+		}
+	}
+
+	return brokers
 }
 
 type SchedulerConfig struct {
@@ -64,16 +78,16 @@ func (c Config) Validate() error {
 	if c.GRPC.Port == c.Server.Port {
 		return fmt.Errorf("HTTP and gRPC ports must be different")
 	}
-	if len(c.Kafka.Brokers) == 0 {
+	if strings.TrimSpace(c.Kafka.Brokers) == "" {
 		return fmt.Errorf("Kafka brokers are required")
 	}
-	for _, broker := range c.Kafka.Brokers {
+	for _, broker := range strings.Split(c.Kafka.Brokers, ",") {
 		if strings.TrimSpace(broker) == "" {
 			return fmt.Errorf("Kafka brokers must not contain empty addresses")
 		}
 	}
-	if strings.TrimSpace(c.Kafka.OutputTopic) == "" {
-		return fmt.Errorf("Kafka output topic is required")
+	if strings.TrimSpace(c.Kafka.PriceCheckedTopic) == "" {
+		return fmt.Errorf("Kafka price_checked_topic is required")
 	}
 	if c.Scheduler.Interval <= 0 {
 		return fmt.Errorf("scheduler interval must be positive")

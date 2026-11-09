@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,7 +37,7 @@ func TestLoadConfigWithoutExternalConnections(t *testing.T) {
 	if cfg.Server.Port != 8184 || cfg.Server.ShutdownTimeout != 10*time.Second || cfg.GRPC.Port != 9090 {
 		t.Fatal("server settings were not decoded")
 	}
-	if cfg.Kafka.OutputTopic != "Price-Checked-Topic" || len(cfg.Kafka.Brokers) != 1 {
+	if cfg.Kafka.PriceCheckedTopic != "Price-Checked-Topic" || len(cfg.Kafka.BrokerList()) != 2 {
 		t.Fatal("Kafka producer settings were not decoded")
 	}
 	if cfg.Scheduler.Interval != 10*time.Second || cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Bybit.Timeout != 5*time.Second || cfg.Exchanges.OKX.BaseURL != "https://www.okx.com" {
@@ -58,19 +60,20 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadDotenvAndProcessPrecedence(t *testing.T) {
 	clearExchangeEnv(t)
 	path := filepath.Join(t.TempDir(), ".env")
-	data := "EXCHANGE_DATA_SERVER_PORT=8284\nEXCHANGE_DATA_GRPC_PORT=9190\nEXCHANGE_DATA_POLL_INTERVAL=15s\nEXCHANGE_DATA_KAFKA_BROKERS=broker-a:9092, broker-b:9092\nEXCHANGE_DATA_OKX_TIMEOUT=8s\n"
+	data := "EXCHANGE_DATA_SERVER_PORT=8284\nEXCHANGE_DATA_GRPC_PORT=9190\nEXCHANGE_DATA_POLL_INTERVAL=15s\nEXCHANGE_DATA_KAFKA_BROKERS=broker-a:9092, broker-b:9092\nEXCHANGE_DATA_OKX_TIMEOUT=8s\nEXCHANGE_DATA_KAFKA_OUTPUT_TOPIC=dotenv-prices\n"
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("EXCHANGE_DATA_SERVER_PORT", "8384")
+	t.Setenv("EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "process-prices")
 	cfg, err := Load("testdata/config.yaml", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Server.Port != 8384 || cfg.GRPC.Port != 9190 || cfg.Scheduler.Interval != 15*time.Second || cfg.Exchanges.OKX.Timeout != 8*time.Second {
+	if cfg.Kafka.PriceCheckedTopic != "process-prices" || cfg.Server.Port != 8384 || cfg.GRPC.Port != 9190 || cfg.Scheduler.Interval != 15*time.Second || cfg.Exchanges.OKX.Timeout != 8*time.Second {
 		t.Fatal("expected process > dotenv > YAML precedence")
 	}
-	if len(cfg.Kafka.Brokers) != 2 || cfg.Kafka.Brokers[1] != "broker-b:9092" {
+	if len(cfg.Kafka.BrokerList()) != 2 || cfg.Kafka.BrokerList()[1] != "broker-b:9092" {
 		t.Fatal("broker CSV was not decoded or trimmed")
 	}
 }
@@ -84,6 +87,11 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{"EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT", "0s"},
 		{"EXCHANGE_DATA_SERVER_READ_TIMEOUT", "invalid"},
 		{"EXCHANGE_DATA_KAFKA_BROKERS", "broker-a:9092,"},
+		{"EXCHANGE_DATA_KAFKA_BROKERS", ""},
+		{"EXCHANGE_DATA_KAFKA_BROKERS", " "},
+		{"EXCHANGE_DATA_KAFKA_BROKERS", ","},
+		{"EXCHANGE_DATA_KAFKA_BROKERS", "broker-a:9092,,broker-b:9092"},
+		{"EXCHANGE_DATA_KAFKA_BROKERS", ",broker-a:9092"},
 		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", ""},
 		{"EXCHANGE_DATA_POLL_INTERVAL", "0s"},
 		{"EXCHANGE_DATA_BINANCE_BASE_URL", "invalid"},
@@ -161,5 +169,47 @@ func TestProjectConfigLoads(t *testing.T) {
 	}
 	if cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Binance.RetryDelay != 3*time.Second || cfg.Exchanges.Binance.MaxAttempts != 3 {
 		t.Fatalf("unexpected project Binance settings: %+v", cfg.Exchanges.Binance)
+	}
+}
+
+func TestKafkaCSVInYAML(t *testing.T) {
+	clearExchangeEnv(t)
+	original, err := os.ReadFile("testdata/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, csv string
+		valid     bool
+	}{
+		{"single broker", "broker-a:9092", true},
+		{"spaces around brokers", " broker-a:9092, broker-b:9092 ", true},
+		{"empty entry", "broker-a:9092, ", false},
+		{"empty string", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := strings.Replace(string(original), `brokers: "localhost:29092,localhost:39092"`, fmt.Sprintf("brokers: %q", tc.csv), 1)
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if !tc.valid {
+				if err == nil {
+					t.Fatal("invalid broker CSV accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			brokers := cfg.Kafka.BrokerList()
+			if len(brokers) == 0 || brokers[0] != "broker-a:9092" {
+				t.Fatalf("unexpected broker list: %v", brokers)
+			}
+			if cfg.Kafka.PriceCheckedTopic != "Price-Checked-Topic" {
+				t.Fatal("price_checked_topic was not loaded")
+			}
+		})
 	}
 }

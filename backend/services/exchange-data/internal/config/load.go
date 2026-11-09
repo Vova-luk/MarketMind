@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -29,7 +28,7 @@ func Load(path string, envPaths ...string) (*Config, error) {
 	defer file.Close()
 	cfg := Config{
 		GRPC:      GRPCConfig{Host: "0.0.0.0", Port: 9090, ShutdownTimeout: 10 * time.Second},
-		Kafka:     KafkaConfig{Brokers: []string{"localhost:9092"}, OutputTopic: "Price-Checked-Topic"},
+		Kafka:     KafkaConfig{Brokers: "localhost:29092,localhost:39092", PriceCheckedTopic: "Price-Checked-Topic"},
 		Scheduler: SchedulerConfig{Interval: 10 * time.Second},
 		Exchanges: ExchangesConfig{
 			Binance: ExchangeConfig{BaseURL: "https://data-api.binance.vision", Timeout: 5 * time.Second, RetryDelay: 3 * time.Second, MaxAttempts: 3},
@@ -58,7 +57,8 @@ func (c *Config) applyEnv() error {
 	}{
 		{"EXCHANGE_DATA_SERVER_HOST", &c.Server.Host},
 		{"EXCHANGE_DATA_GRPC_HOST", &c.GRPC.Host},
-		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", &c.Kafka.OutputTopic},
+		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", &c.Kafka.PriceCheckedTopic},
+		{"EXCHANGE_DATA_KAFKA_BROKERS", &c.Kafka.Brokers},
 		{"EXCHANGE_DATA_BINANCE_BASE_URL", &c.Exchanges.Binance.BaseURL},
 		{"EXCHANGE_DATA_BYBIT_BASE_URL", &c.Exchanges.Bybit.BaseURL},
 		{"EXCHANGE_DATA_OKX_BASE_URL", &c.Exchanges.OKX.BaseURL},
@@ -103,12 +103,6 @@ func (c *Config) applyEnv() error {
 				return fmt.Errorf("%s must be a duration such as 5s", field.name)
 			}
 			*field.target = duration
-		}
-	}
-	if value, ok := os.LookupEnv("EXCHANGE_DATA_KAFKA_BROKERS"); ok {
-		c.Kafka.Brokers = strings.Split(value, ",")
-		for i := range c.Kafka.Brokers {
-			c.Kafka.Brokers[i] = strings.TrimSpace(c.Kafka.Brokers[i])
 		}
 	}
 	return nil

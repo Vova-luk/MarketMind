@@ -31,7 +31,7 @@ func TestEmbeddedMigrationsAreDiscovered(t *testing.T) {
 	}
 	sources := provider.ListSources()
 	if len(sources) != 6 {
-		t.Fatalf("expected six initial migrations, got %d", len(sources))
+		t.Fatalf("expected six migrations, got %d", len(sources))
 	}
 	for i, source := range sources {
 		if source.Version != int64(i+1) {
