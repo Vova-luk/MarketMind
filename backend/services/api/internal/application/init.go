@@ -4,8 +4,21 @@ import (
 	"context"
 	"fmt"
 
+	"marketmind/api/internal/adapters/exchangedata"
 	"marketmind/api/internal/config"
+	alerthandlers "marketmind/api/internal/handlers/alerts"
+	exchangehandlers "marketmind/api/internal/handlers/exchanges"
+	markethandlers "marketmind/api/internal/handlers/markets"
+	subscriptionhandlers "marketmind/api/internal/handlers/subscriptions"
+	userhandlers "marketmind/api/internal/handlers/users"
+	alertrepository "marketmind/api/internal/repository/alerts"
+	exchangerepository "marketmind/api/internal/repository/exchanges"
+	subscriptionrepository "marketmind/api/internal/repository/subscriptions"
+	userrepository "marketmind/api/internal/repository/users"
 	"marketmind/api/internal/server"
+	alertservice "marketmind/api/internal/service/alerts"
+	marketservice "marketmind/api/internal/service/markets"
+	subscriptionservice "marketmind/api/internal/service/subscriptions"
 	"marketmind/utils/logger"
 	"marketmind/utils/migrator"
 	"marketmind/utils/postgres"
@@ -58,7 +71,16 @@ func (a *Application) initMigrator(ctx context.Context) error {
 }
 
 func (a *Application) initRouter() {
-	a.router = NewRouter(a.logger)
+	botToken := a.config.String("telegram.bot_token")
+	users := userhandlers.NewHandler(userrepository.NewRepository(a.database), a.logger)
+	exchangeRepo := exchangerepository.NewRepository(a.database)
+	exchanges := exchangehandlers.NewHandler(exchangeRepo, a.logger)
+	markets := markethandlers.NewHandler(marketservice.NewService(exchangeRepo, exchangedata.Stub{}), a.logger)
+	subscriptionRepo := subscriptionrepository.NewRepository(a.database)
+	addSubscriptions := subscriptionservice.NewService(subscriptionRepo, a.config.Int("subscriptions.limit"))
+	subscriptions := subscriptionhandlers.NewHandler(subscriptionRepo, addSubscriptions, a.logger)
+	alerts := alertservice.NewService(alertrepository.NewRepository(a.database), a.config.Int("alerts.active_limit"))
+	a.router = NewRouter(a.logger, botToken, users, exchanges, subscriptions, alerthandlers.NewHandler(alerts, subscriptionRepo, a.logger), markets)
 }
 
 func (a *Application) initServer() error {

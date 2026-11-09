@@ -87,7 +87,7 @@ func TestMigrationLifecycle(t *testing.T) {
 	if err := pool.Ping(ctx); err != nil {
 		t.Fatalf("migrator closed the application pool: %v", err)
 	}
-	tables := []string{"alerts", "cryptocurrencies", "exchanges", "markets", "subscriptions", "users"}
+	tables := []string{"alerts", "exchanges", "markets", "subscriptions", "users"}
 	assertMarketTables(t, ctx, pool, tables)
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
@@ -104,17 +104,42 @@ func TestMigrationLifecycle(t *testing.T) {
 	assertSeededExchanges(t, ctx, pool)
 	t.Log("Up and repeated Up succeeded")
 
-	var coinID, marketID, userID, subscriptionID int64
-	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.cryptocurrencies (name) VALUES ('Bitcoin') RETURNING id`).Scan(&coinID); err != nil {
-		t.Fatal(err)
-	}
+	var marketID, userID, subscriptionID int64
 	const price = "0.123456789012345678"
-	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.markets (cryptocurrency_id, exchange_id, price) VALUES ($1, 1, $2) RETURNING id`, coinID, price).Scan(&marketID); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.markets (exchange_id, external_id, base_asset, quote_asset, price) VALUES (1, 'BTCUSDT', 'BTC', 'USDT', $1) RETURNING id`, price).Scan(&marketID); err != nil {
 		t.Fatal(err)
 	}
 	var storedPrice string
 	if err := pool.QueryRow(ctx, `SELECT price::text FROM market_mind.markets WHERE id=$1`, marketID).Scan(&storedPrice); err != nil || storedPrice != price {
 		t.Fatalf("decimal price lost precision: %q, error %v", storedPrice, err)
+	}
+	var createdAt, updatedAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT created_at, updated_at FROM market_mind.markets WHERE id=$1`, marketID).
+		Scan(&createdAt, &updatedAt); err != nil || !createdAt.Equal(updatedAt) {
+		t.Fatalf("initial market timestamps: created %v, updated %v, error %v", createdAt, updatedAt, err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE market_mind.markets SET updated_at = '2000-01-01T00:00:00Z' WHERE id=$1`, marketID); err != nil {
+		t.Fatal(err)
+	}
+	var createdAfter time.Time
+	if err := pool.QueryRow(ctx, `UPDATE market_mind.markets SET price = 1.25, updated_at = statement_timestamp()
+		WHERE id=$1 RETURNING created_at, updated_at`, marketID).
+		Scan(&createdAfter, &updatedAt); err != nil || !createdAfter.Equal(createdAt) || updatedAt.Before(createdAt) {
+		t.Fatalf("market timestamps after price write: created %v, updated %v, error %v", createdAfter, updatedAt, err)
+	}
+	// One coin may have several quote assets on one exchange. External IDs are
+	// exchange-scoped and must retain their original spelling.
+	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.markets
+		(exchange_id, external_id, base_asset, quote_asset, price)
+		VALUES (1, 'BTCEUR', 'BTC', 'EUR', 77000),
+		       (2, 'BTCUSDT', 'BTC', 'USDT', 83781),
+		       (3, 'BTC-USDT', 'BTC', 'USDT', 83781)`); err != nil {
+		t.Fatalf("multiple quote assets and exchange-specific symbols: %v", err)
+	}
+	var symbol, baseAsset, quoteAsset string
+	if err := pool.QueryRow(ctx, `SELECT external_id, base_asset, quote_asset FROM market_mind.markets
+		WHERE exchange_id=3`).Scan(&symbol, &baseAsset, &quoteAsset); err != nil || symbol != "BTC-USDT" || baseAsset != "BTC" || quoteAsset != "USDT" {
+		t.Fatalf("instrument metadata changed: %q %q %q, error %v", symbol, baseAsset, quoteAsset, err)
 	}
 	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.users (telegram_user_id) VALUES (12345) RETURNING id`).Scan(&userID); err != nil {
 		t.Fatal(err)
@@ -122,7 +147,8 @@ func TestMigrationLifecycle(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.subscriptions (user_id, market_id) VALUES ($1, $2) RETURNING id`, userID, marketID).Scan(&subscriptionID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, reference_price) VALUES ('percent', $1, 2.5, $2)`, subscriptionID, price); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, condition, reference_price)
+		VALUES ('percent', $1, 2.5, 'gte', $2)`, subscriptionID, price); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
@@ -131,9 +157,12 @@ func TestMigrationLifecycle(t *testing.T) {
 	}{
 		{"duplicate Telegram user", `INSERT INTO market_mind.users (telegram_user_id) VALUES (12345)`, "23505", nil},
 		{"duplicate subscription", `INSERT INTO market_mind.subscriptions (user_id, market_id) VALUES ($1, $2)`, "23505", []any{userID, marketID}},
-		{"duplicate market", `INSERT INTO market_mind.markets (cryptocurrency_id, exchange_id, price) VALUES ($1, 1, 1)`, "23505", []any{coinID}},
-		{"unknown exchange", `INSERT INTO market_mind.markets (cryptocurrency_id, exchange_id, price) VALUES ($1, 999, 1)`, "23503", []any{coinID}},
-		{"nonpositive price", `UPDATE market_mind.markets SET price = 0 WHERE id=$1`, "23514", []any{marketID}},
+		{"duplicate external ID", `INSERT INTO market_mind.markets (exchange_id, external_id, base_asset, quote_asset, price) VALUES (1, 'BTCUSDT', 'ETH', 'EUR', 1)`, "23505", nil},
+		{"duplicate pair with another external ID", `INSERT INTO market_mind.markets (exchange_id, external_id, base_asset, quote_asset, price) VALUES (1, 'BTC-USDT', 'BTC', 'USDT', 1)`, "23505", nil},
+		{"unknown exchange", `INSERT INTO market_mind.markets (exchange_id, external_id, base_asset, quote_asset, price) VALUES (999, 'BTCUSDT', 'BTC', 'USDT', 1)`, "23503", nil},
+		{"missing external ID", `UPDATE market_mind.markets SET external_id=NULL WHERE id=$1`, "23502", []any{marketID}},
+		{"missing base asset", `UPDATE market_mind.markets SET base_asset=NULL WHERE id=$1`, "23502", []any{marketID}},
+		{"missing quote asset", `UPDATE market_mind.markets SET quote_asset=NULL WHERE id=$1`, "23502", []any{marketID}},
 	} {
 		_, err := pool.Exec(ctx, tc.query, tc.args...)
 		var pgErr *pgconn.PgError
