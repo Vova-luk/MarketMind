@@ -28,6 +28,7 @@ func Load(path string, envPaths ...string) (*Config, error) {
 	defer file.Close()
 	cfg := Config{
 		GRPC:      GRPCConfig{Host: "127.0.0.1", Port: 9090, ShutdownTimeout: 10 * time.Second},
+		API:       APIConfig{Address: "127.0.0.1:50051", RequestTimeout: 5 * time.Second},
 		Kafka:     KafkaConfig{Brokers: "localhost:29092,localhost:39092", PriceCheckedTopic: "Price-Checked-Topic"},
 		Scheduler: SchedulerConfig{Interval: 10 * time.Second},
 		Exchanges: ExchangesConfig{
@@ -64,6 +65,7 @@ func (c *Config) applyEnv() error {
 	}{
 		{"EXCHANGE_DATA_SERVER_HOST", &c.Server.Host},
 		{"EXCHANGE_DATA_GRPC_HOST", &c.GRPC.Host},
+		{"EXCHANGE_DATA_API_ADDRESS", &c.API.Address},
 		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", &c.Kafka.PriceCheckedTopic},
 		{"EXCHANGE_DATA_KAFKA_BROKERS", &c.Kafka.Brokers},
 		{"EXCHANGE_DATA_BINANCE_BASE_URL", &c.Exchanges.Binance.BaseURL},
@@ -98,6 +100,7 @@ func (c *Config) applyEnv() error {
 		{"EXCHANGE_DATA_SERVER_WRITE_TIMEOUT", &c.Server.WriteTimeout},
 		{"EXCHANGE_DATA_SERVER_SHUTDOWN_TIMEOUT", &c.Server.ShutdownTimeout},
 		{"EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT", &c.GRPC.ShutdownTimeout},
+		{"EXCHANGE_DATA_API_REQUEST_TIMEOUT", &c.API.RequestTimeout},
 		{"EXCHANGE_DATA_POLL_INTERVAL", &c.Scheduler.Interval},
 		{"EXCHANGE_DATA_BINANCE_TIMEOUT", &c.Exchanges.Binance.Timeout},
 		{"EXCHANGE_DATA_BINANCE_RETRY_DELAY", &c.Exchanges.Binance.RetryDelay},

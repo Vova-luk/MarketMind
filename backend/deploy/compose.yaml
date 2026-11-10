@@ -51,7 +51,8 @@ services:
     restart: unless-stopped
     environment:
       EXCHANGE_DATA_GRPC_HOST: 0.0.0.0
-      EXCHANGE_DATA_SCHEDULER_DISABLED: "true"
+      EXCHANGE_DATA_API_ADDRESS: api:50051
+      EXCHANGE_DATA_KAFKA_BROKERS: broker-1:19092,broker-2:19092
     expose:
       - "9090"
     volumes:
