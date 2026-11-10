@@ -9,9 +9,19 @@ export default function CoinSheet({
 }) {
   const [targetPriceInput, setTargetPriceInput] = useState('');
   const [targetPercentInput, setTargetPercentInput] = useState('');
+  const [priceDirection, setPriceDirection] = useState('gte'); // 'gte' | 'lte'
   const [inputError, setInputError] = useState('');
 
   const currentPrice = Number(detail.price || 0);
+
+  const handlePriceChange = (e) => {
+    const val = e.target.value;
+    setTargetPriceInput(val);
+    const num = Number(val.replace(',', '.'));
+    if (!isNaN(num) && num > 0 && currentPrice > 0) {
+      setPriceDirection(num >= currentPrice ? 'gte' : 'lte');
+    }
+  };
 
   const handlePriceSubmit = () => {
     const raw = targetPriceInput.trim().replace(',', '.');
@@ -61,14 +71,25 @@ export default function CoinSheet({
     setTargetPercentInput('');
   };
 
-  const formatAlertBadge = (alert) => {
+  // Проверяем, выше ли целевая цена, чем цена в момент создания алерта
+  const isTargetAboveReference = (alert) => {
+    const target = Number(alert.target_price);
+    const ref = Number(alert.reference_price);
+    if (!isNaN(target) && !isNaN(ref) && ref > 0) {
+      return target >= ref;
+    }
+    const dir = alert.direction || alert.condition || 'gte';
+    return dir === 'gte';
+  };
+
+  const formatAlertBadge = (alert, isUp) => {
+    const sign = isUp ? '+' : '-';
     if (alert.type === 'percent') {
-      const sign = Number(alert.value) > 0 ? '+' : '';
-      return `${sign}${alert.value}%`;
+      const numVal = Math.abs(Number(alert.value));
+      return `${sign}${String(numVal).replace('.', ',')}%`;
     }
     const diff = Number(alert.target_price) - Number(alert.reference_price);
-    const sign = diff >= 0 ? '+' : '';
-    return `${sign}${Math.round(diff)} ${detail.quote_asset}`;
+    return `${sign}${Math.abs(Math.round(diff))} ${detail.quote_asset}`;
   };
 
   return (
@@ -82,38 +103,46 @@ export default function CoinSheet({
         </div>
         <div className="flex items-center gap-3 mt-2">
           <span className="text-2xl font-normal text-black">
-            {detail.price !== null
+            {detail.price !== null && detail.price !== undefined
               ? `${Number(detail.price).toLocaleString('ru-RU')} ${detail.quote_asset}`
               : 'Цена недоступна'}
           </span>
         </div>
       </div>
 
-      {/*добавление алерта*/}
+      {/* добавление алерта */}
       <div>
         <h3 className="text-xl font-normal text-black mb-3">Добавить алерт</h3>
         <div className="grid grid-cols-2 gap-3">
+          {/* достижение стоимости */}
           <div className="p-3 rounded-2xl border border-gray-200 shadow-xs flex flex-col justify-between">
-            <label className="text-xs text-gray-700 mb-2">
-              Достижение стоимости
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-gray-700">
+                Достижение стоимости
+              </label>
+            </div>
+
             <input
               type="number"
               value={targetPriceInput}
-              onChange={(e) => setTargetPriceInput(e.target.value)}
+              onChange={handlePriceChange}
               placeholder="85000"
               className={`w-full px-2 py-1 text-sm border rounded-md mb-2 focus:outline-none ${
                 inputError ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            <button
-              onClick={handlePriceSubmit}
-              className="self-end px-4 py-1 bg-blue-500 text-white text-xs rounded-lg cursor-pointer"
-            >
-              ОК
-            </button>
+
+            <div className="flex items-center justify-end gap-1">
+              <button
+                onClick={handlePriceSubmit}
+                className="px-3.5 py-1 bg-blue-500 text-white text-xs rounded-lg cursor-pointer"
+              >
+                ОК
+              </button>
+            </div>
           </div>
 
+          {/* изменение на % */}
           <div className="p-3 rounded-2xl border border-gray-200 shadow-xs flex flex-col justify-between">
             <label className="text-xs text-gray-700 mb-2">
               Изменение на (%)
@@ -127,12 +156,14 @@ export default function CoinSheet({
                 inputError ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            <button
-              onClick={handlePercentSubmit}
-              className="self-end px-4 py-1 bg-blue-500 text-white text-xs rounded-lg cursor-pointer"
-            >
-              ОК
-            </button>
+            <div className="flex items-center justify-end">
+              <button
+                onClick={handlePercentSubmit}
+                className="px-3.5 py-1 bg-blue-500 text-white text-xs rounded-lg cursor-pointer"
+              >
+                ОК
+              </button>
+            </div>
           </div>
         </div>
         {inputError && (
@@ -140,7 +171,7 @@ export default function CoinSheet({
         )}
       </div>
 
-      {/*алерты*/}
+      {/* алерты */}
       <div>
         <h3 className="text-xl font-normal text-black mb-3">Активные алерты</h3>
         {!detail.alerts || detail.alerts.length === 0 ? (
@@ -149,47 +180,64 @@ export default function CoinSheet({
           </p>
         ) : (
           <div className="space-y-3">
-            {detail.alerts.map((alert) => (
-              <div
-                key={alert.alert_id}
-                className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
-              >
-                <span className="text-sm font-normal text-black">
-                  Цель: {Number(alert.target_price).toLocaleString('ru-RU')}{' '}
-                  {detail.quote_asset} ({formatAlertBadge(alert)})
-                </span>
+            {detail.alerts.map((alert) => {
+              const isUp = isTargetAboveReference(alert);
 
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() =>
-                      onToggleAlert(alert.alert_id, !alert.is_active)
-                    }
-                    className="w-12 h-7 bg-gray-200 rounded-full p-0.5 flex items-center transition-all cursor-pointer"
-                  >
-                    <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-white transition-transform ${
-                        alert.is_active
-                          ? 'bg-blue-500 translate-x-0'
-                          : 'bg-red-500 translate-x-5'
-                      }`}
-                    >
-                      {alert.is_active ? (
-                        <Bell className="w-3.5 h-3.5" />
-                      ) : (
-                        <BellOff className="w-3.5 h-3.5" />
-                      )}
+              return (
+                <div
+                  key={alert.alert_id}
+                  className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-normal text-black">
+                        Цель {isUp ? '≥' : '≤'}{' '}
+                        {Number(alert.target_price).toLocaleString('ru-RU')}{' '}
+                        {detail.quote_asset}{' '}
+                        <span
+                          className={`font-medium ${
+                            isUp ? 'text-green-600' : 'text-red-500'
+                          }`}
+                        >
+                          ({formatAlertBadge(alert, isUp)})
+                        </span>
+                      </span>
+                      
                     </div>
-                  </button>
+                  </div>
 
-                  <button
-                    onClick={() => onDeleteAlert(alert.alert_id)}
-                    className="p-1 text-gray-700 hover:text-red-500 cursor-pointer"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() =>
+                        onToggleAlert(alert.alert_id, !alert.is_active)
+                      }
+                      className="w-12 h-7 bg-gray-200 rounded-full p-0.5 flex items-center transition-all cursor-pointer"
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-white transition-transform ${
+                          alert.is_active
+                            ? 'bg-blue-500 translate-x-0'
+                            : 'bg-red-500 translate-x-5'
+                        }`}
+                      >
+                        {alert.is_active ? (
+                          <Bell className="w-3.5 h-3.5" />
+                        ) : (
+                          <BellOff className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => onDeleteAlert(alert.alert_id)}
+                      className="p-1 text-gray-700 hover:text-red-500 cursor-pointer"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
