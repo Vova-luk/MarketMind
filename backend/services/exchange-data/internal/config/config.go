@@ -50,6 +50,7 @@ func (c KafkaConfig) BrokerList() []string {
 
 type SchedulerConfig struct {
 	Interval time.Duration `yaml:"interval"`
+	Disabled bool          `yaml:"disabled"`
 }
 
 type ExchangesConfig struct {

@@ -44,7 +44,9 @@ func NewApplication(ctx context.Context, configPath string) (_ *Application, err
 	if err = a.initMigrator(ctx); err != nil {
 		return nil, err
 	}
-	a.initRouter()
+	if err = a.initRouter(); err != nil {
+		return nil, err
+	}
 	if err = a.initServer(); err != nil {
 		return nil, err
 	}

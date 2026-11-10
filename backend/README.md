@@ -12,7 +12,8 @@ docker compose --env-file .env -f deploy/compose.yaml up --build -d
 curl -i http://localhost:8080/health
 ```
 
-Compose запускает PostgreSQL, Kafka, Kafka UI и API. Конфиг YAML монтируется в контейнер только для чтения. Логи по умолчанию пишутся в stdout
+Compose запускает PostgreSQL, Kafka, Kafka UI, API и Exchange-Data для поиска рынков.
+Конфиги API и Exchange-Data монтируются в контейнеры только для чтения. Логи по умолчанию пишутся в stdout.
 
 ```bash
 docker compose --env-file .env -f deploy/compose.yaml logs -f api
@@ -28,6 +29,14 @@ cp .env.example .env
 docker compose --env-file .env -f deploy/compose.postgres.yaml up -d --wait
 cd services
 go run ./api/cmd -config ./api/config/config.yaml -env-file ../.env
+```
+
+Для поиска рынков запустите Exchange-Data во втором терминале из `backend/services`.
+API подключается к `127.0.0.1:9090`. Адрес можно переопределить через
+`MARKETMIND_EXCHANGE_DATA__ADDRESS`.
+
+```bash
+EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
 ```
 
 ## Служебный gRPC-метод API

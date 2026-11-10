@@ -18,12 +18,18 @@ func (f closeFunc) Close() error { return f() }
 func TestApplicationClosesKafkaAfterAllComponentsStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	started := make(chan struct{}, 2)
-	serverStopped, schedulerStopped := make(chan struct{}), make(chan struct{})
+	started := make(chan struct{}, 3)
+	serverStopped, grpcStopped, schedulerStopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	closed := 0
 	application := &Application{
 		server: runnerFunc(func(ctx context.Context) error {
 			defer close(serverStopped)
+			started <- struct{}{}
+			<-ctx.Done()
+			return nil
+		}),
+		grpc: runnerFunc(func(ctx context.Context) error {
+			defer close(grpcStopped)
 			started <- struct{}{}
 			<-ctx.Done()
 			return nil
@@ -41,6 +47,11 @@ func TestApplicationClosesKafkaAfterAllComponentsStop(t *testing.T) {
 				t.Error("Kafka closed before HTTP server stopped")
 			}
 			select {
+			case <-grpcStopped:
+			default:
+				t.Error("Kafka closed before gRPC server stopped")
+			}
+			select {
 			case <-schedulerStopped:
 			default:
 				t.Error("Kafka closed before in-flight price checks stopped")
@@ -51,7 +62,7 @@ func TestApplicationClosesKafkaAfterAllComponentsStop(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- application.Run(ctx) }()
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		select {
 		case <-started:
 		case <-time.After(time.Second):
@@ -80,6 +91,7 @@ func TestApplicationFailureStopsPeerAndPreservesCloseError(t *testing.T) {
 	peerStopped := make(chan struct{})
 	application := &Application{
 		server:    runnerFunc(func(context.Context) error { return want }),
+		grpc:      runnerFunc(func(ctx context.Context) error { <-ctx.Done(); return nil }),
 		scheduler: runnerFunc(func(ctx context.Context) error { defer close(peerStopped); <-ctx.Done(); return nil }),
 		kafka: closeFunc(func() error {
 			select {
@@ -104,6 +116,7 @@ func TestApplicationTreatsUnexpectedComponentExitAsFailure(t *testing.T) {
 	defer cancel()
 	application := &Application{
 		server:    runnerFunc(func(context.Context) error { return nil }),
+		grpc:      runnerFunc(func(ctx context.Context) error { <-ctx.Done(); return nil }),
 		scheduler: runnerFunc(func(ctx context.Context) error { <-ctx.Done(); return nil }),
 		kafka:     closeFunc(func() error { return nil }),
 	}

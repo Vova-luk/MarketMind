@@ -17,6 +17,7 @@ services:
       MARKETMIND_SERVER__PORT: "8080"
       MARKETMIND_GRPC__HOST: 0.0.0.0
       MARKETMIND_GRPC__PORT: "50051"
+      MARKETMIND_EXCHANGE_DATA__ADDRESS: exchange-data:9090
       MARKETMIND_DATABASE__HOST: postgres
       MARKETMIND_DATABASE__PORT: "5432"
       MARKETMIND_DATABASE__USER: ${MARKETMIND_DATABASE__USER:-marketmind}
@@ -31,6 +32,8 @@ services:
       - ../services/api/config/config.yaml:/app/config/config.yaml:ro
       - api_logs:/app/logs
     depends_on:
+      exchange-data:
+        condition: service_started
       postgres:
         condition: service_healthy
     healthcheck:
@@ -39,6 +42,20 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+    stop_grace_period: 15s
+
+  exchange-data:
+    build:
+      context: ..
+      dockerfile: services/exchange-data/Dockerfile
+    restart: unless-stopped
+    environment:
+      EXCHANGE_DATA_GRPC_HOST: 0.0.0.0
+      EXCHANGE_DATA_SCHEDULER_DISABLED: "true"
+    expose:
+      - "9090"
+    volumes:
+      - ../services/exchange-data/config/config.yaml:/app/config/config.yaml:ro
     stop_grace_period: 15s
 
 volumes:

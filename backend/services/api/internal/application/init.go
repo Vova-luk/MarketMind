@@ -1,8 +1,13 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"marketmind/api/internal/adapters/exchangedata"
 	"marketmind/api/internal/config"
@@ -20,6 +25,7 @@ import (
 	marketservice "marketmind/api/internal/service/markets"
 	subscriptionservice "marketmind/api/internal/service/subscriptions"
 	"marketmind/gen/go/api"
+	exchangedatapb "marketmind/gen/go/exchangedata"
 	"marketmind/utils/logger"
 	"marketmind/utils/migrator"
 	"marketmind/utils/postgres"
@@ -71,17 +77,30 @@ func (a *Application) initMigrator(ctx context.Context) error {
 	return migrator.Run(ctx, a.database, a.logger)
 }
 
-func (a *Application) initRouter() {
+func (a *Application) initRouter() error {
+	address := cmp.Or(a.config.String("exchange_data.address"), "127.0.0.1:9090")
+	timeout := cmp.Or(a.config.Duration("exchange_data.request_timeout"), 40*time.Second)
+	if timeout < 0 {
+		return fmt.Errorf("exchange_data.request_timeout must be positive")
+	}
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("create Exchange-Data client: %w", err)
+	}
+	a.shutdownFuncs = append(a.shutdownFuncs, conn.Close)
+	catalog := exchangedata.NewCatalog(exchangedatapb.NewMarketSearchServiceClient(conn), timeout)
+
 	botToken := a.config.String("telegram.bot_token")
 	users := userhandlers.NewHandler(userrepository.NewRepository(a.database), a.logger)
 	exchangeRepo := exchangerepository.NewRepository(a.database)
 	exchanges := exchangehandlers.NewHandler(exchangeRepo, a.logger)
-	markets := markethandlers.NewHandler(marketservice.NewService(exchangeRepo, exchangedata.Stub{}), a.logger)
+	markets := markethandlers.NewHandler(marketservice.NewService(exchangeRepo, catalog), a.logger)
 	subscriptionRepo := subscriptionrepository.NewRepository(a.database)
 	addSubscriptions := subscriptionservice.NewService(subscriptionRepo, a.config.Int("subscriptions.limit"))
 	subscriptions := subscriptionhandlers.NewHandler(subscriptionRepo, addSubscriptions, a.logger)
 	alerts := alertservice.NewService(alertrepository.NewRepository(a.database), a.config.Int("alerts.active_limit"))
 	a.router = NewRouter(a.logger, botToken, users, exchanges, subscriptions, alerthandlers.NewHandler(alerts, subscriptionRepo, a.logger), markets)
+	return nil
 }
 
 func (a *Application) initServer() error {

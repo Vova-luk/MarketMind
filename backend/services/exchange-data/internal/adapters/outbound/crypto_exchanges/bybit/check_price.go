@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/bybit/dto"
-	"marketmind/exchange-data/internal/config"
-	"marketmind/exchange-data/internal/domain"
-	"marketmind/exchange-data/internal/utils"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/bybit/dto"
+	"marketmind/exchange-data/internal/config"
+	"marketmind/exchange-data/internal/domain"
 )
 
 const exchangeName = "Bybit"
@@ -63,21 +63,7 @@ func (c *BybitClient) GetPrices(ctx context.Context, symbols []string) (*domain.
 		return nil, fmt.Errorf("no non-empty symbols provided")
 	}
 
-	requestURL := strings.TrimRight(c.baseURL, "/") + "/v5/market/tickers?category=spot"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create Bybit request: %w", err)
-	}
-	resp, err := utils.DoWithRetry(req, c.client, utils.RetryConfig{
-		MaxAttempts: c.maxAttempts,
-		Delay:       c.retryDelay,
-	}, c.logger)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	prices, err := decodePrices(resp.Body)
+	prices, err := c.fetchTickers(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +85,16 @@ func (c *BybitClient) GetPrices(ctx context.Context, symbols []string) (*domain.
 	)
 
 	return market, nil
+}
+
+func (c *BybitClient) fetchTickers(ctx context.Context) ([]dto.ExchangePrice, error) {
+	var prices []dto.ExchangePrice
+	err := c.get(ctx, "/v5/market/tickers?category=spot", func(body io.Reader) error {
+		var err error
+		prices, err = decodePrices(body)
+		return err
+	})
+	return prices, err
 }
 
 func decodePrices(body io.Reader) ([]dto.ExchangePrice, error) {
