@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"marketmind/exchange-data/internal/adapters/outbound/kafka_producer/events"
+	"marketmind/contracts/events"
 	"marketmind/exchange-data/internal/domain"
 )
 
