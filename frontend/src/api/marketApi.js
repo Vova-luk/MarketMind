@@ -3,100 +3,159 @@ import { getTelegramUser } from '../utils/telegram';
 
 
 //заглушечки
-const FALLBACK_COINS = [
+const FALLBACK_EXCHANGES = [
+  { id: 1, name: 'Binance' },
+  { id: 2, name: 'Bybit' },
+  { id: 3, name: 'OKX' },
+];
+
+const FALLBACK_SUBSCRIPTIONS = [
   {
-    id: 'btc',
-    name: 'Bitcoin',
-    ticker: 'BTC',
-    price: 83781,
-    change24hDollar: 243,
-    change24hPercent: 0.29,
-    exchange: 'Binance',
-    isWatched: true,
-    alerts: [
-      { id: 1, targetPrice: 87970, diffLabel: '+5%', isActive: true },
-      { id: 2, targetPrice: 83650, diffLabel: '-131$', isActive: false },
-    ],
+    subscription_id: '18',
+    exchange_name: 'Binance',
+    base_asset: 'BTC',
+    quote_asset: 'USDT',
+    price: '83781',
   },
   {
-    id: 'eth',
-    name: 'Etherium',
-    ticker: 'ETH',
-    price: 2505,
-    change24hDollar: -54,
-    change24hPercent: -2.16,
-    exchange: 'Bybit',
-    isWatched: true,
-    alerts: [],
+    subscription_id: '19',
+    exchange_name: 'Bybit',
+    base_asset: 'ETH',
+    quote_asset: 'USDT',
+    price: '2505',
   },
   {
-    id: 'zec',
-    name: 'Zcach',
-    ticker: 'ZEC',
-    price: 1252,
-    change24hDollar: -123,
-    change24hPercent: -9.82,
-    exchange: 'OKX',
-    isWatched: true,
-    alerts: [],
-  },
-  {
-    id: 'btw',
-    name: 'Bitway',
-    ticker: 'BTW',
-    price: 1.92,
-    change24hDollar: 0.05,
-    change24hPercent: 2.6,
-    exchange: 'Binance',
-    isWatched: false,
-    alerts: [],
+    subscription_id: '20',
+    exchange_name: 'OKX',
+    base_asset: 'ZEC',
+    quote_asset: 'USDT',
+    price: '1252',
   },
 ];
 
-//профиль и монеты
-export const fetchInitialData = async () => {
+const FALLBACK_MARKETS = [
+  {
+    exchange_id: 1,
+    external_id: 'BTCUSDT',
+    base_asset: 'BTC',
+    quote_asset: 'USDT',
+    display_name: 'BTC/USDT',
+    price: '83781',
+  },
+  {
+    exchange_id: 1,
+    external_id: 'ETHUSDT',
+    base_asset: 'ETH',
+    quote_asset: 'USDT',
+    display_name: 'ETH/USDT',
+    price: '2505',
+  },
+  {
+    exchange_id: 1,
+    external_id: 'BTWUSDT',
+    base_asset: 'BTW',
+    quote_asset: 'USDT',
+    display_name: 'BTW/USDT',
+    price: '1.92',
+  },
+];
+
+//профиль и инфа
+export const initAppData = async () => {
   try {
-    const response = await apiClient.get('/coins');
+    await apiClient.post('/users/me');
+
+    const [exchangesRes, subsRes] = await Promise.all([
+      apiClient.get('/exchanges'),
+      apiClient.get('/subscriptions'),
+    ]);
+
     return {
-      user: response.data.user || getTelegramUser(),
-      coins: response.data.coins,
+      user: getTelegramUser(),
+      exchanges: exchangesRes.data.items || [],
+      subscriptions: subsRes.data.items || [],
       isOffline: false,
     };
   } catch (error) {
-    console.warn('local data');
+    console.warn('API недоступен, демо режим');
     return {
       user: getTelegramUser(),
-      coins: FALLBACK_COINS,
+      exchanges: FALLBACK_EXCHANGES,
+      subscriptions: FALLBACK_SUBSCRIPTIONS,
       isOffline: true,
     };
   }
 };
 
-//добавить-удалить монету
-export const toggleWatchlistApi = async (coinId, isCurrentlyWatched) => {
-  if (isCurrentlyWatched) {
-    return apiClient.delete(`/watchlist/${coinId}`);
-  } else {
-    return apiClient.post('/watchlist', { coinId });
+//оиск рынков
+export const searchMarketsApi = async (exchangeId, query = '', page = 1, limit = 20) => {
+  try {
+    const params = { exchange_id: exchangeId, page, limit };
+    const trimmed = query.trim();
+    if (trimmed) {
+      params.q = trimmed;
+    }
+    const response = await apiClient.get('/markets', { params });
+    return response.data; 
+  } catch (error) {
+    const q = query.trim().toLowerCase();
+    const filtered = FALLBACK_MARKETS.filter(
+      (m) =>
+        m.display_name.toLowerCase().includes(q) ||
+        m.base_asset.toLowerCase().includes(q)
+    );
+    return { items: filtered, next_page: null };
   }
 };
 
+
+
+// обавить рынок в отслеживаемое
+export const addSubscriptionApi = async (marketOption) => {
+  const payload = {
+    exchange_id: marketOption.exchange_id,
+    external_id: marketOption.external_id,
+    base_asset: marketOption.base_asset,
+    quote_asset: marketOption.quote_asset,
+    display_name: marketOption.display_name,
+    price: marketOption.price,
+  };
+  const response = await apiClient.post('/subscriptions', payload);
+  return response.data; 
+};
+
+//удалить рынок из отслеживаемого
+export const deleteSubscriptionApi = async (subscriptionId) => {
+  await apiClient.delete(`/subscriptions/${subscriptionId}`);
+};
+
+
+//получение карточки монетф
+export const getSubscriptionDetailApi = async (subscriptionId) => {
+  const response = await apiClient.get(`/subscriptions/${subscriptionId}`);
+  return response.data; 
+};
 //новый алерт
-export const createAlertApi = async (coinId, targetPrice, diffLabel) => {
-  const response = await apiClient.post('/alerts', {
-    coinId,
-    targetPrice,
-    diffLabel,
+export const createAlertApi = async (subscriptionId, { type, value, condition }) => {
+  const cleanValue = String(value).replace(/^\+/, '').trim();
+  const response = await apiClient.post(`/subscriptions/${subscriptionId}/alerts`, {
+    type,
+    value: cleanValue,
+    condition,
   });
-  return response.data;
+  return response.data; 
 };
 
 //колокольчик
-export const toggleAlertApi = async (alertId, isActive) => {
-  return apiClient.patch(`/alerts/${alertId}`, { isActive });
+export const toggleAlertApi = async (subscriptionId, alertId, isActive) => {
+  const response = await apiClient.patch(
+    `/subscriptions/${subscriptionId}/alerts/${alertId}`,
+    { is_active: Boolean(isActive) }
+  );
+  return response.data;
 };
 
 //удаление
-export const deleteAlertApi = async (alertId) => {
-  return apiClient.delete(`/alerts/${alertId}`);
+export const deleteAlertApi = async (subscriptionId, alertId) => {
+  await apiClient.delete(`/subscriptions/${subscriptionId}/alerts/${alertId}`);
 };

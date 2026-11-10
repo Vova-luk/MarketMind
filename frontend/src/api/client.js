@@ -1,21 +1,24 @@
 import axios from 'axios';
 import { getTelegramUser } from '../utils/telegram';
 
-//VITE_API_URL=http://localhost:8080/api/v1
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 5000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  timeout: 8000,
 });
 
 apiClient.interceptors.request.use((config) => {
   const { initData } = getTelegramUser();
-  if (initData) {
-    config.headers.Authorization = `tma ${initData}`;
+  const rawInitData = initData || import.meta.env.VITE_DEV_INIT_DATA || '';
+
+  if (rawInitData) {
+    config.headers.Authorization = `tma ${rawInitData}`;
   }
+
+  if (config.data !== undefined) {
+    config.headers['Content-Type'] = 'application/json';
+  }
+
   return config;
 });
