@@ -65,7 +65,7 @@ func (r *Repository) getDetail(ctx context.Context, telegramUserID, subscription
 		       a.is_active
 		`+subscriptionJoins+`
 		LEFT JOIN LATERAL (
-		    SELECT id, type, value, condition, reference_price, is_active
+		    SELECT id, type, value, direction, reference_price, is_active
 		    FROM market_mind.alerts
 		    WHERE subscription_id = s.id
 		    ORDER BY id

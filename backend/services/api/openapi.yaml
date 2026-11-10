@@ -10,7 +10,7 @@ info:
     Ответы Mini App персональные: Cache-Control: no-store.
     Служебный метод gRPC marketmind.api.v1.MarketCatalogService/GetMarketsToCheck
     возвращает рынки всех пользователей.
-    Контракт метода находится в ../proto/api/api.proto.
+    Контракт метода находится в ../contracts/proto/api/api.proto.
 
     Единица отслеживания — spot-рынок (биржа + base_asset + quote_asset).
     Поддерживаются валюты котировки доступных биржевых пар, не только USDT.

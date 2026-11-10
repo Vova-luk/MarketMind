@@ -98,19 +98,28 @@ func (s subscriptionReaderStub) ListAlerts(ctx context.Context, telegramUserID, 
 func TestSubscriptionDetailRoute(t *testing.T) {
 	const botToken = "test-token"
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	reader := subscriptionReaderStub{get: func(_ context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
-		if telegramUserID != 123 || subscriptionID != 18 {
-			t.Fatalf("unexpected subscription lookup: Telegram user %d, subscription %d", telegramUserID, subscriptionID)
-		}
-		price := "83781.00000000000001"
-		return domainsubscriptions.Detail{
-			Subscription: domainsubscriptions.Subscription{
-				ID: 18, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance", Price: &price,
-			},
-			UpdatedAt: time.Date(2026, 11, 9, 11, 30, 0, 0, time.FixedZone("UTC+3", 3*60*60)),
-			Alerts:    []domainsubscriptions.Alert{{ID: 9, Type: "percent", Value: "5", Direction: "gte", ReferencePrice: "83781", TargetPrice: "87970.05", IsActive: true}},
-		}, nil
-	}}
+	alert := domainsubscriptions.Alert{
+		ID: 9, Type: "percent", Value: "5", Direction: "gte",
+		ReferencePrice: "83781", TargetPrice: "87970.05", IsActive: true,
+	}
+	reader := subscriptionReaderStub{
+		get: func(_ context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
+			if telegramUserID != 123 || subscriptionID != 18 {
+				t.Fatalf("unexpected subscription lookup: Telegram user %d, subscription %d", telegramUserID, subscriptionID)
+			}
+			price := "83781.00000000000001"
+			return domainsubscriptions.Detail{
+				Subscription: domainsubscriptions.Subscription{
+					ID: 18, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance", Price: &price,
+				},
+				UpdatedAt: time.Date(2026, 11, 9, 11, 30, 0, 0, time.FixedZone("UTC+3", 3*60*60)),
+				Alerts:    []domainsubscriptions.Alert{alert},
+			}, nil
+		},
+		listAlerts: func(context.Context, int64, int64, int, int64) ([]domainsubscriptions.Alert, string, error) {
+			return []domainsubscriptions.Alert{alert}, "USDT", nil
+		},
+	}
 	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil,
 		subscriptionhandlers.NewHandler(reader, nil, logger), alerthandlers.NewHandler(nil, reader, logger), nil)
 
@@ -119,10 +128,10 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 		status int
 		body   string
 	}{
-		{"/api/v1/subscriptions/18", http.StatusOK,
+		{"/api/v1/subscriptions/18?unused=1", http.StatusOK,
 			`{"subscription_id":"18","base_asset":"BTC","quote_asset":"USDT","exchange_name":"Binance","price":"83781.00000000000001","updated_at":"2026-11-09T08:30:00Z","alerts":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781","target_price":"87970.05","is_active":true}]}`},
 		{"/api/v1/subscriptions/18/alerts", http.StatusOK,
-			`{"items":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781","target_price":"87970.05","is_active":true,"quote_asset":"USDT"}]}`},
+			`{"items":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781","target_price":"87970.05","is_active":true,"quote_asset":"USDT"}],"next_page":null}`},
 		{"/api/v1/subscriptions/018", http.StatusBadRequest,
 			`{"error":{"code":"VALIDATION_ERROR","message":"Invalid subscription ID"}}`},
 	} {
