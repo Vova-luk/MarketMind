@@ -13,7 +13,14 @@ import (
 	"marketmind/bot/internal/config"
 )
 
-const heartbeatInterval = 10 * time.Second
+const (
+	heartbeatInterval = 10 * time.Second
+	addressLogKey     = "addr"
+	serverRunning     = "server is running"
+	serverAlive       = "server is alive"
+	serverStopping    = "shutting down server"
+	serverStopped     = "server exited cleanly"
+)
 
 type Server struct {
 	Server          *http.Server
@@ -58,14 +65,14 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		errChan <- err
 	}()
-	s.logger.InfoContext(ctx, "server is running", slog.String("addr", addr))
+	s.logger.InfoContext(ctx, serverRunning, slog.String(addressLogKey, addr))
 
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			s.logger.InfoContext(ctx, "server is alive", slog.String("addr", addr))
+			s.logger.InfoContext(ctx, serverAlive, slog.String(addressLogKey, addr))
 		case <-ctx.Done():
 			return s.shutdown(errChan)
 		case err := <-errChan:
@@ -80,7 +87,7 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) shutdown(errChan <-chan error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
-	s.logger.Info("shutting down server")
+	s.logger.Info(serverStopping)
 	shutdownErr := s.Server.Shutdown(ctx)
 	if shutdownErr != nil {
 		shutdownErr = errors.Join(fmt.Errorf("shutdown HTTP: %w", shutdownErr), s.Server.Close())
@@ -89,6 +96,6 @@ func (s *Server) shutdown(errChan <-chan error) error {
 	if err := errors.Join(shutdownErr, serveErr); err != nil {
 		return err
 	}
-	s.logger.Info("server exited cleanly")
+	s.logger.Info(serverStopped)
 	return nil
 }

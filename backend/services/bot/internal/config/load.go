@@ -9,6 +9,32 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.yaml.in/yaml/v3"
+
+	"marketmind/contracts/events"
+)
+
+const (
+	defaultKafkaBroker     = "localhost:9092"
+	defaultKafkaGroupID    = "marketmind-bot"
+	defaultKafkaWorkers    = 1
+	defaultTelegramAPIURL  = "https://api.telegram.org"
+	defaultTelegramTimeout = 5 * time.Second
+)
+
+const (
+	envServerHost            = "BOT_SERVER_HOST"
+	envServerPort            = "BOT_SERVER_PORT"
+	envServerReadTimeout     = "BOT_SERVER_READ_TIMEOUT"
+	envServerWriteTimeout    = "BOT_SERVER_WRITE_TIMEOUT"
+	envServerShutdownTimeout = "BOT_SERVER_SHUTDOWN_TIMEOUT"
+	envKafkaBrokers          = "BOT_KAFKA_BROKERS"
+	envKafkaGroupID          = "BOT_KAFKA_GROUP_ID"
+	envKafkaInputTopic       = "BOT_KAFKA_INPUT_TOPIC"
+	envKafkaWorkers          = "BOT_KAFKA_WORKERS"
+	envTelegramToken         = "BOT_TOKEN"
+	envTelegramAPIURL        = "BOT_TELEGRAM_API_URL"
+	envTelegramTimeout       = "BOT_TELEGRAM_TIMEOUT"
+	envMiniAppURL            = "BOT_MINI_APP_URL"
 )
 
 // Load applies defaults, YAML and environment overrides, then validates Config.
@@ -29,10 +55,10 @@ func Load(path string, envPaths ...string) (*Config, error) {
 	defer file.Close()
 	cfg := Config{
 		Kafka: KafkaConfig{
-			Brokers: []string{"localhost:9092"},
-			GroupID: "marketmind-bot", InputTopic: "Price-Changed-Topic",
+			Brokers: []string{defaultKafkaBroker},
+			GroupID: defaultKafkaGroupID, InputTopic: events.PriceChangedTopic, Workers: defaultKafkaWorkers,
 		},
-		Telegram: TelegramConfig{APIURL: "https://api.telegram.org", RequestTimeout: 5 * time.Second},
+		Telegram: TelegramConfig{APIURL: defaultTelegramAPIURL, RequestTimeout: defaultTelegramTimeout},
 	}
 	decoder := yaml.NewDecoder(file)
 	decoder.KnownFields(true)
@@ -53,32 +79,40 @@ func (c *Config) applyEnv() error {
 		name   string
 		target *string
 	}{
-		{"BOT_SERVER_HOST", &c.Server.Host},
-		{"BOT_KAFKA_GROUP_ID", &c.Kafka.GroupID},
-		{"BOT_KAFKA_INPUT_TOPIC", &c.Kafka.InputTopic},
-		{"BOT_TOKEN", &c.Telegram.Token},
-		{"BOT_TELEGRAM_API_URL", &c.Telegram.APIURL},
-		{"BOT_MINI_APP_URL", &c.Telegram.MiniAppURL},
+		{envServerHost, &c.Server.Host},
+		{envKafkaGroupID, &c.Kafka.GroupID},
+		{envKafkaInputTopic, &c.Kafka.InputTopic},
+		{envTelegramToken, &c.Telegram.Token},
+		{envTelegramAPIURL, &c.Telegram.APIURL},
+		{envMiniAppURL, &c.Telegram.MiniAppURL},
 	} {
 		if value, ok := os.LookupEnv(field.name); ok {
 			*field.target = value
 		}
 	}
-	if value, ok := os.LookupEnv("BOT_SERVER_PORT"); ok {
-		port, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("BOT_SERVER_PORT must be an integer")
+	for _, field := range []struct {
+		name   string
+		target *int
+	}{
+		{envServerPort, &c.Server.Port},
+		{envKafkaWorkers, &c.Kafka.Workers},
+	} {
+		if value, ok := os.LookupEnv(field.name); ok {
+			number, err := strconv.Atoi(value)
+			if err != nil {
+				return fmt.Errorf("%s must be an integer", field.name)
+			}
+			*field.target = number
 		}
-		c.Server.Port = port
 	}
 	for _, field := range []struct {
 		name   string
 		target *time.Duration
 	}{
-		{"BOT_SERVER_READ_TIMEOUT", &c.Server.ReadTimeout},
-		{"BOT_SERVER_WRITE_TIMEOUT", &c.Server.WriteTimeout},
-		{"BOT_SERVER_SHUTDOWN_TIMEOUT", &c.Server.ShutdownTimeout},
-		{"BOT_TELEGRAM_TIMEOUT", &c.Telegram.RequestTimeout},
+		{envServerReadTimeout, &c.Server.ReadTimeout},
+		{envServerWriteTimeout, &c.Server.WriteTimeout},
+		{envServerShutdownTimeout, &c.Server.ShutdownTimeout},
+		{envTelegramTimeout, &c.Telegram.RequestTimeout},
 	} {
 		if value, ok := os.LookupEnv(field.name); ok {
 			duration, err := time.ParseDuration(value)
@@ -88,7 +122,7 @@ func (c *Config) applyEnv() error {
 			*field.target = duration
 		}
 	}
-	if value, ok := os.LookupEnv("BOT_KAFKA_BROKERS"); ok {
+	if value, ok := os.LookupEnv(envKafkaBrokers); ok {
 		c.Kafka.Brokers = strings.Split(value, ",")
 		for i := range c.Kafka.Brokers {
 			c.Kafka.Brokers[i] = strings.TrimSpace(c.Kafka.Brokers[i])

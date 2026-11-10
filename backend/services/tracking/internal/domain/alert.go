@@ -1,11 +1,13 @@
 package domain
 
+import "marketmind/api/pkg/alerts"
+
 type Alert struct {
 	AlertID             int64
-	Type                string
+	Type                alerts.Kind
 	MarketID            int64
 	TelegramUserID      int64
-	Direction           string
+	Direction           alerts.Direction
 	ReferencePrice      string
 	Value               string
 	IsNotified          bool

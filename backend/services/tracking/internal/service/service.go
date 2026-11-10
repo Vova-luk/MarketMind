@@ -51,7 +51,7 @@ func (s *Service) checkMarket(ctx context.Context, eventID string, quote events.
 	if err != nil {
 		return err
 	}
-	
+
 	if quote.ReceivedAt.IsZero() {
 		return fmt.Errorf("quote received time is required")
 	}

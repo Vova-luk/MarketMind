@@ -29,11 +29,12 @@ func NewPriceCheckedConsumer(cfg config.KafkaConfig, handler PriceCheckedHandler
 
 	return &PriceCheckedConsumer{
 		reader: kafka.NewReader(kafka.ReaderConfig{
-			Topic:   cfg.PriceCheckedTopic,
-			Brokers: cfg.Brokers,
-			GroupID: cfg.GroupID,
+			Topic:                 cfg.PriceCheckedTopic,
+			Brokers:               cfg.Brokers,
+			GroupID:               cfg.GroupID,
+			WatchPartitionChanges: true,
 		}),
-		topic: cfg.PriceCheckedTopic,
+		topic:   cfg.PriceCheckedTopic,
 		handler: handler,
 
 		logger: logger,

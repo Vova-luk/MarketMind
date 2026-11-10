@@ -2,9 +2,11 @@ package service
 
 import (
 	"fmt"
-	"marketmind/tracking/internal/domain"
 	"math/big"
 	"regexp"
+
+	"marketmind/api/pkg/alerts"
+	"marketmind/tracking/internal/domain"
 )
 
 var decimalPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
@@ -37,9 +39,9 @@ func threshold(alert domain.Alert) (*big.Rat, error) {
 		return nil, err
 	}
 	switch alert.Type {
-	case "price":
+	case alerts.Price:
 		return positiveDecimal(alert.Value)
-	case "percent":
+	case alerts.Percent:
 		if value.Sign() == 0 || value.Cmp(big.NewRat(-100, 1)) <= 0 {
 			return nil, fmt.Errorf("invalid percent value")
 		}
@@ -55,11 +57,11 @@ func threshold(alert domain.Alert) (*big.Rat, error) {
 	}
 }
 
-func matches(price, target *big.Rat, direction string) (bool, error) {
+func matches(price, target *big.Rat, direction alerts.Direction) (bool, error) {
 	switch direction {
-	case "gte":
+	case alerts.GreaterOrEqual:
 		return price.Cmp(target) >= 0, nil
-	case "lte":
+	case alerts.LessOrEqual:
 		return price.Cmp(target) <= 0, nil
 	default:
 		return false, fmt.Errorf("unknown alert direction %q", direction)

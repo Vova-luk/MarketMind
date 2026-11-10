@@ -1,6 +1,9 @@
 package events
 
-// price-changed-topic
+import "marketmind/api/pkg/alerts"
+
+const PriceChangedTopic = "Price-Changed-Topic"
+
 type PriceChangedEvent struct {
 	EventID string              `json:"event_id"`
 	Items   []PriceNotification `json:"items"`
@@ -16,9 +19,9 @@ type PriceNotification struct {
 	BaseAsset    string `json:"base_asset"`
 	QuoteAsset   string `json:"quote_asset"`
 
-	Type           string `json:"type"`
-	Value          string `json:"value"`
-	CurrentPrice   string `json:"current_price"`
-	Direction      string `json:"direction"`
-	ReferencePrice string `json:"reference_price"`
+	Type           alerts.Kind      `json:"type"`
+	Value          string           `json:"value"`
+	CurrentPrice   string           `json:"current_price"`
+	Direction      alerts.Direction `json:"direction"`
+	ReferencePrice string           `json:"reference_price"`
 }

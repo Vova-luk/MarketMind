@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const maxServerPort = 65535
+
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Kafka    KafkaConfig    `yaml:"kafka"`
@@ -25,11 +27,11 @@ type KafkaConfig struct {
 	Brokers    []string `yaml:"brokers"`
 	GroupID    string   `yaml:"consumer_group"`
 	InputTopic string   `yaml:"input_topic"`
+	Workers    int      `yaml:"workers"`
 }
 
 type TelegramConfig struct {
-	// Token is optional until the Telegram adapter is connected.
-	Token          string        `yaml:"token"`
+	Token          string        `yaml:"-"`
 	APIURL         string        `yaml:"api_url"`
 	RequestTimeout time.Duration `yaml:"request_timeout"`
 	MiniAppURL     string        `yaml:"mini_app_url"`
@@ -50,6 +52,12 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.Kafka.GroupID) == "" || strings.TrimSpace(c.Kafka.InputTopic) == "" {
 		return fmt.Errorf("Kafka consumer group and input topic are required")
 	}
+	if c.Kafka.Workers < 1 {
+		return fmt.Errorf("Kafka workers must be positive")
+	}
+	if strings.TrimSpace(c.Telegram.Token) == "" {
+		return fmt.Errorf("%s is required", envTelegramToken)
+	}
 	if !validHTTPURL(c.Telegram.APIURL) {
 		return fmt.Errorf("Telegram api_url must be an absolute HTTP or HTTPS URL")
 	}
@@ -66,8 +74,8 @@ func (c ServerConfig) Validate() error {
 	if strings.TrimSpace(c.Host) == "" {
 		return fmt.Errorf("host is required")
 	}
-	if c.Port < 1 || c.Port > 65535 {
-		return fmt.Errorf("port must be between 1 and 65535")
+	if c.Port < 1 || c.Port > maxServerPort {
+		return fmt.Errorf("port must be between 1 and %d", maxServerPort)
 	}
 	if c.ReadTimeout <= 0 || c.WriteTimeout <= 0 || c.ShutdownTimeout <= 0 {
 		return fmt.Errorf("server timeouts must be positive")

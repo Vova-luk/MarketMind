@@ -18,14 +18,15 @@ type PriceCheckedProducer struct {
 func NewPriceCheckedProducer(topic string, brokers []string) *PriceCheckedProducer {
 	return &PriceCheckedProducer{
 		writer: &kafka.Writer{
-			Topic:        topic,
-			Addr:         kafka.TCP(brokers...),
-			Balancer:     &kafka.Hash{},
-			RequiredAcks: kafka.RequireAll,
-			MaxAttempts:  3,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 5 * time.Second,
-			BatchTimeout: 100 * time.Millisecond,
+			Topic:                  topic,
+			Addr:                   kafka.TCP(brokers...),
+			Balancer:               &kafka.Hash{},
+			RequiredAcks:           kafka.RequireAll,
+			MaxAttempts:            3,
+			ReadTimeout:            5 * time.Second,
+			WriteTimeout:           5 * time.Second,
+			BatchTimeout:           100 * time.Millisecond,
+			AllowAutoTopicCreation: true,
 		},
 		topic: topic,
 	}
