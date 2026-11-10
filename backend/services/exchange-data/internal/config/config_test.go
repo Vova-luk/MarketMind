@@ -15,7 +15,7 @@ func clearExchangeEnv(t *testing.T) {
 		"EXCHANGE_DATA_SERVER_HOST", "EXCHANGE_DATA_SERVER_PORT", "EXCHANGE_DATA_SERVER_READ_TIMEOUT",
 		"EXCHANGE_DATA_SERVER_WRITE_TIMEOUT", "EXCHANGE_DATA_SERVER_SHUTDOWN_TIMEOUT",
 		"EXCHANGE_DATA_GRPC_HOST", "EXCHANGE_DATA_GRPC_PORT", "EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT",
-		"EXCHANGE_DATA_KAFKA_BROKERS", "EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "EXCHANGE_DATA_POLL_INTERVAL",
+		"EXCHANGE_DATA_KAFKA_BROKERS", "EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "EXCHANGE_DATA_POLL_INTERVAL", "EXCHANGE_DATA_SCHEDULER_DISABLED",
 		"EXCHANGE_DATA_BINANCE_BASE_URL", "EXCHANGE_DATA_BINANCE_TIMEOUT",
 		"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS",
 		"EXCHANGE_DATA_BYBIT_BASE_URL", "EXCHANGE_DATA_BYBIT_TIMEOUT",
@@ -94,6 +94,7 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{"EXCHANGE_DATA_KAFKA_BROKERS", ",broker-a:9092"},
 		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", ""},
 		{"EXCHANGE_DATA_POLL_INTERVAL", "0s"},
+		{"EXCHANGE_DATA_SCHEDULER_DISABLED", "invalid"},
 		{"EXCHANGE_DATA_BINANCE_BASE_URL", "invalid"},
 		{"EXCHANGE_DATA_BINANCE_TIMEOUT", "0s"},
 		{"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "-1s"},
@@ -167,7 +168,8 @@ func TestProjectConfigLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Binance.RetryDelay != 3*time.Second || cfg.Exchanges.Binance.MaxAttempts != 3 {
+	if cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Binance.Timeout != 10*time.Second ||
+		cfg.Exchanges.Binance.RetryDelay != 3*time.Second || cfg.Exchanges.Binance.MaxAttempts != 3 {
 		t.Fatalf("unexpected project Binance settings: %+v", cfg.Exchanges.Binance)
 	}
 }

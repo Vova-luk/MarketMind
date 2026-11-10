@@ -4,6 +4,15 @@ server:
   read_timeout: 10s
   shutdown_timeout: 10s
 
+grpc:
+  host: 127.0.0.1
+  port: 50051
+  shutdown_timeout: 4s
+
+exchange_data:
+  address: 127.0.0.1:9090
+  request_timeout: 40s
+
 logger:
   level: info
   output: stdout

@@ -1,6 +1,7 @@
 package markets
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"math"
@@ -11,16 +12,20 @@ import (
 	"unicode/utf8"
 
 	"marketmind/api/internal/domain/exchanges"
-	"marketmind/api/internal/httpresponse"
 	service "marketmind/api/internal/service/markets"
+	"marketmind/api/internal/utils/httpresponse"
 )
 
+type MarketSearcher interface {
+	Search(ctx context.Context, query service.SearchQuery) (service.Page, error)
+}
+
 type Handler struct {
-	service *service.Service
+	service MarketSearcher
 	logger  *slog.Logger
 }
 
-func NewHandler(service *service.Service, logger *slog.Logger) *Handler {
+func NewHandler(service MarketSearcher, logger *slog.Logger) *Handler {
 	return &Handler{service: service, logger: logger}
 }
 

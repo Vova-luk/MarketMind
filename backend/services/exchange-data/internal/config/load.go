@@ -27,11 +27,11 @@ func Load(path string, envPaths ...string) (*Config, error) {
 	}
 	defer file.Close()
 	cfg := Config{
-		GRPC:      GRPCConfig{Host: "0.0.0.0", Port: 9090, ShutdownTimeout: 10 * time.Second},
+		GRPC:      GRPCConfig{Host: "127.0.0.1", Port: 9090, ShutdownTimeout: 10 * time.Second},
 		Kafka:     KafkaConfig{Brokers: "localhost:29092,localhost:39092", PriceCheckedTopic: "Price-Checked-Topic"},
 		Scheduler: SchedulerConfig{Interval: 10 * time.Second},
 		Exchanges: ExchangesConfig{
-			Binance: ExchangeConfig{BaseURL: "https://data-api.binance.vision", Timeout: 5 * time.Second, RetryDelay: 3 * time.Second, MaxAttempts: 3},
+			Binance: ExchangeConfig{BaseURL: "https://data-api.binance.vision", Timeout: 10 * time.Second, RetryDelay: 3 * time.Second, MaxAttempts: 3},
 			Bybit:   ExchangeConfig{BaseURL: "https://api.bybit.com", Timeout: 5 * time.Second, MaxAttempts: 1},
 			OKX:     ExchangeConfig{BaseURL: "https://www.okx.com", Timeout: 5 * time.Second, MaxAttempts: 1},
 		},
@@ -51,6 +51,13 @@ func Load(path string, envPaths ...string) (*Config, error) {
 }
 
 func (c *Config) applyEnv() error {
+	if value, ok := os.LookupEnv("EXCHANGE_DATA_SCHEDULER_DISABLED"); ok {
+		disabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("EXCHANGE_DATA_SCHEDULER_DISABLED must be a boolean")
+		}
+		c.Scheduler.Disabled = disabled
+	}
 	for _, field := range []struct {
 		name   string
 		target *string

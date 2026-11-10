@@ -9,23 +9,29 @@ import (
 
 	domain "marketmind/api/internal/domain/alerts"
 	"marketmind/api/internal/domain/subscriptions"
-	"marketmind/api/internal/httpresponse"
-	"marketmind/api/internal/requestctx"
-	"marketmind/api/internal/requestparams"
 	service "marketmind/api/internal/service/alerts"
+	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/api/internal/utils/requestctx"
+	"marketmind/api/internal/utils/requestparams"
 )
 
+type AlertWriter interface {
+	Create(ctx context.Context, telegramUserID, subscriptionID int64, condition domain.Condition) (service.Result, error)
+	Update(ctx context.Context, telegramUserID, subscriptionID, alertID int64, patch service.Patch) (service.Result, error)
+	Delete(ctx context.Context, telegramUserID, subscriptionID, alertID int64) error
+}
+
 type Handler struct {
-	service       *service.Service
+	service       AlertWriter
 	subscriptions subscriptionReader
 	logger        *slog.Logger
 }
 
 type subscriptionReader interface {
-	Get(ctx context.Context, telegramUserID, subscriptionID int64) (subscriptions.Detail, error)
+	ListAlerts(ctx context.Context, telegramUserID, subscriptionID int64, limit int, offset int64) ([]subscriptions.Alert, string, error)
 }
 
-func NewHandler(service *service.Service, subscriptions subscriptionReader, logger *slog.Logger) *Handler {
+func NewHandler(service AlertWriter, subscriptions subscriptionReader, logger *slog.Logger) *Handler {
 	return &Handler{service: service, subscriptions: subscriptions, logger: logger}
 }
 
@@ -34,9 +40,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	page, ok := requestparams.ParsePage(r.URL.RawQuery)
+	if !ok {
+		httpresponse.WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid pagination parameters")
+		return
+	}
 	ctx := r.Context()
 	telegramUserID, _ := requestctx.TelegramUserID(ctx)
-	detail, err := h.subscriptions.Get(ctx, telegramUserID, subscriptionID)
+	alerts, quoteAsset, err := h.subscriptions.ListAlerts(ctx, telegramUserID, subscriptionID, page.Size+1, page.Offset())
 	if errors.Is(err, subscriptions.ErrNotFound) {
 		httpresponse.WriteError(w, http.StatusNotFound, "SUBSCRIPTION_NOT_FOUND", "Subscription not found")
 		return
@@ -47,18 +58,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]alertResponse, 0, len(detail.Alerts))
-	for _, alert := range detail.Alerts {
+	count := min(len(alerts), page.Size)
+	items := make([]alertResponse, 0, count)
+	for _, alert := range alerts[:count] {
 		items = append(items, alertResponse{
 			ID: alert.ID, Type: alert.Type, Value: alert.Value,
 			Direction:      alert.Direction,
 			ReferencePrice: alert.ReferencePrice, TargetPrice: alert.TargetPrice,
-			IsActive: alert.IsActive, QuoteAsset: detail.QuoteAsset,
+			IsActive: alert.IsActive, QuoteAsset: quoteAsset,
 		})
 	}
 	httpresponse.WriteJSON(w, http.StatusOK, struct {
-		Items []alertResponse `json:"items"`
-	}{Items: items})
+		Items    []alertResponse `json:"items"`
+		NextPage *int            `json:"next_page"`
+	}{Items: items, NextPage: page.NextPage(len(alerts))})
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {

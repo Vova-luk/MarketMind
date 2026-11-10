@@ -1,10 +1,11 @@
-syntax = "proto3"
+syntax = "proto3";
 
 package marketmind.api.v1;
 
-option go_package = "marketmind/gen/go/api/;api";
+option go_package = "marketmind/gen/go/api;api";
 
 service MarketCatalogService {
+  // Lists each market on an active exchange that has at least one subscription.
   rpc GetMarketsToCheck(GetMarketsToCheckRequest)
       returns (GetMarketsToCheckResponse);
 }
@@ -12,6 +13,7 @@ service MarketCatalogService {
 message GetMarketsToCheckRequest {}
 
 message GetMarketsToCheckResponse {
+  // Sorted by exchange name, with markets sorted by numeric market ID.
   repeated ExchangeMarkets items = 1;
 }
 
@@ -22,5 +24,6 @@ message ExchangeMarkets {
 
 message MarketToCheck {
   string market_id = 1;
+  // Instrument identifier in the exchange's original format.
   string external_id = 2;
 }

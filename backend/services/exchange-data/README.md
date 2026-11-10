@@ -1,6 +1,7 @@
 # Exchange-Data-Service
 
-Сервис запускает HTTP-сервер состояния на порту `8184` и планировщик сбора цен.
+Сервис запускает HTTP-сервер состояния на порту `8184`, gRPC-поиск на порту `9090`
+и планировщик сбора цен.
 Первый сбор начинается сразу, каждый следующий — через `scheduler.interval`
 после завершения предыдущего. Циклы не пересекаются; ошибки цикла логируются,
 а последующие проверки продолжаются. `/health` подтверждает работу HTTP-сервера,
@@ -44,15 +45,27 @@ go test -race ./exchange-data/...
 - `internal/adapters/outbound/crypto_exchanges` — места для клиентов Binance, Bybit и OKX.
 - `internal/adapters/outbound/kafka_producer` — место для публикации в `Price-Checked-Topic`.
 
-## Следующий этап
+## Поиск рынков по gRPC
 
-Опрос бирж и Kafka producer подключены через `app`. Настоящий API-клиент,
-gRPC и WebSocket ещё не реализованы. Секция `grpc` описывает будущий сервер
-на порту `9090`; сейчас этот порт не открывается. БД и Kafka consumer
-этому сервису не требуются. Публичные цены запрашиваются без ключей бирж.
+Метод `SearchMarkets` принимает `exchange_name`, `query`, `page` и `limit`.
+Пустая строка соответствует всему активному спотовому каталогу выбранной биржи.
+Страница по умолчанию `1`, лимит `20`, максимум `100`. Совпадения сортируются
+по `external_id` до пагинации. `next_page` присутствует, если есть ещё результаты.
+
+Выполните команду из `backend/services`.
+
+```bash
+grpcurl -plaintext -import-path proto -proto exchange-data/search.proto \
+  -d '{"exchange_name":"Binance","query":"btc","page":1,"limit":5}' \
+  127.0.0.1:9090 marketmind.exchangedata.v1.MarketSearchService/SearchMarkets
+```
+
+Метаданные пар кэшируются на минуту, последние цены на пять секунд. Поиск
+использует публичные данные бирж. Чтобы запустить только HTTP и gRPC, задайте
+`EXCHANGE_DATA_SCHEDULER_DISABLED=true`. Compose запускает Exchange-Data в этом режиме.
 
 По Ctrl+C или SIGTERM общий контекст отменяется: прекращаются запросы и ожидания,
-завершаются планировщик и HTTP-сервер, затем закрывается Kafka writer.
+завершаются планировщик, HTTP и gRPC, затем закрывается Kafka writer.
 Пока эти компоненты не остановились, producer не закрывается.
 
 ## Настройки Binance
@@ -86,7 +99,7 @@ gRPC и WebSocket ещё не реализованы. Секция `grpc` опи
 Таймаут, задержка и число попыток берутся из `exchanges.okx`.
 Повторяются таймауты и HTTP 502/503/504. HTTP 429 и ошибки API в поле `code`
 возвращаются без повторов. `Warn` сообщает о повторе, `Debug` — об итогах запроса.
-Планировщик вызывает REST-клиент через сервисный слой; gRPC и WebSocket пока не реализованы.
+Планировщик и gRPC-поиск используют этот REST-клиент через сервисный слой.
 
 [Документация OKX: GET / Tickers](https://www.okx.com/docs-v5/en/#order-book-trading-market-data-get-tickers).
 

@@ -8,8 +8,9 @@ info:
     Остальные операции требуют регистрации (иначе 404 USER_NOT_REGISTERED).
     Пользователь определяется только по проверенному initData.
     Ответы Mini App персональные: Cache-Control: no-store.
-    Служебная ручка /internal/v1/tracked-markets использует отдельный сервисный токен,
-    не требует Telegram initData и возвращает рынки всех пользователей.
+    Служебный метод gRPC marketmind.api.v1.MarketCatalogService/GetMarketsToCheck
+    возвращает рынки всех пользователей.
+    Контракт метода находится в ../contracts/proto/api/api.proto.
 
     Единица отслеживания — spot-рынок (биржа + base_asset + quote_asset).
     Поддерживаются валюты котировки доступных биржевых пар, не только USDT.
@@ -21,8 +22,9 @@ info:
     UI передаёт выбранный результат поиска для добавления. Отслеживаемое возвращает subscription_id
     для открытия карточки, удаления подписки и управления алертами.
 
-    Неизвестные поля JSON/query, повторяющиеся
-    query-параметры и неверные значения отклоняются с 400 VALIDATION_ERROR.
+    Неизвестные поля JSON и неверные значения отклоняются с 400 VALIDATION_ERROR.
+    Операции с query-параметрами отклоняют неизвестные параметры, повторы и неверные значения.
+    Остальные операции игнорируют строку запроса.
     Для JSON-тела нужен Content-Type: application/json (иначе 415).
     POST /users/me не читает тело запроса.
 
@@ -93,7 +95,6 @@ paths:
                 items:
                 - {id: 1, name: Binance}
         '401': {$ref: '#/components/responses/Unauthorized'}
-        '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {$ref: '#/components/responses/Unavailable'}
@@ -105,14 +106,13 @@ paths:
       operationId: searchMarkets
       summary: Найти рынки для выпадающего списка
       description: |
-        Сейчас источник данных — фиксированный тестовый каталог с демонстрационными ценами.
-        Для активной биржи заглушка ищет в каталоге без учёта регистра по внешнему ID
-        и подписи пары. Инструменты возвращаются независимо от наличия в нашей БД.
-        При подключении Exchange-Data источник будет выполнять оба сценария поиска,
-        eq и constraint, за один вызов с общей строкой q.
-        Один инструмент включается в результат один раз, даже если найден обоими сценариями.
-        Пробелы по краям q удаляются; пустой q или его отсутствие возвращают каталог.
-        Порядок фиксирован: external_id ASC, лексикографически. GET ничего не создаёт в БД.
+        API передаёт имя выбранной биржи, q, page и limit в Exchange-Data по gRPC.
+        Поиск по подстроке охватывает внешний ID и подпись пары BASE/QUOTE без учёта регистра.
+        Exchange-Data возвращает активные спотовые пары, включая пары без записей в нашей БД.
+        Один инструмент включается в результат один раз.
+        Пустой q или его отсутствие возвращают страницу каталога.
+        Перед пагинацией результаты сортируются лексикографически по external_id ASC.
+        GET ничего не создаёт в БД.
         Ответ содержит exchange_id, external_id, base_asset, quote_asset, display_name и price.
         Источник передаёт коды активов отдельно.
         API формирует display_name как base_asset + "/" + quote_asset; полное имя монеты не требуется.
@@ -125,7 +125,7 @@ paths:
       parameters:
       - name: q
         in: query
-        description: Общая строка поиска для обоих сценариев Exchange-Data; пробелы по краям удаляются.
+        description: Подстрока внешнего ID или подписи пары. Пробелы по краям удаляются.
         schema: {type: string, maxLength: 120}
         example: BTC
       - name: exchange_id
@@ -183,9 +183,12 @@ paths:
       operationId: listSubscriptions
       summary: Получить список отслеживаемых рынков
       description: |
-        Все подписки текущего пользователя по subscription_id ASC, включая рынки
-        отключённых бирж (для них price: null). Без пагинации: размер ограничен лимитом.
+        Подписки текущего пользователя по subscription_id ASC, включая рынки
+        отключённых бирж (для них price: null).
         Каждая строка содержит subscription_id, base_asset, quote_asset, exchange_name и price.
+      parameters:
+      - {$ref: '#/components/parameters/ListPage'}
+      - {$ref: '#/components/parameters/ListPageSize'}
       responses:
         '200':
           description: Список подписок в порядке добавления. Если подписок нет, items будет пустым массивом.
@@ -199,6 +202,7 @@ paths:
                   price: '83781'
                   base_asset: BTC
                   quote_asset: USDT
+                next_page: null
         '401': {$ref: '#/components/responses/Unauthorized'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -358,12 +362,15 @@ paths:
       - Alerts
       x-implementation-status: implemented
       operationId: listSubscriptionAlerts
-      summary: Получить все алерты подписки
+      summary: Получить список алертов подписки
       description: |
         Все активные и отключённые алерты по alert_id ASC. В самостоятельном ответе
         каждый алерт содержит quote_asset. Нужен для обновления алертов без повторной загрузки карточки.
         Цель рассчитывается при чтении из сохранённого условия и reference_price.
-        Без пагинации. Текущая цена и доступность биржи не влияют на сохранённые условия.
+        Текущая цена и доступность биржи не влияют на сохранённые условия.
+      parameters:
+      - {$ref: '#/components/parameters/ListPage'}
+      - {$ref: '#/components/parameters/ListPageSize'}
       responses:
         '200':
           description: Список алертов; items пуст, если условия ещё не созданы.
@@ -399,10 +406,12 @@ paths:
                       target_price: '83000'
                       is_active: true
                       quote_asset: USDT
+                    next_page: null
                 empty:
                   summary: Алерты ещё не созданы
                   value:
                     items: []
+                    next_page: null
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -560,12 +569,12 @@ paths:
       security:
       - ServiceToken: []
       description: |
-        Exchange-Data вызывает GET /internal/v1/tracked-markets в API по расписанию.
+        Планируемый HTTP-вариант служебного метода gRPC MarketCatalogService/GetMarketsToCheck.
         API читает БД и возвращает полный текущий список рынков активных бирж,
         на которые есть хотя бы одна подписка. Пользователь и наличие активных алертов
         не ограничивают выборку. Рынок включается один раз независимо от числа подписок.
         Используется EXISTS по subscriptions.market_id, без размножения строк JOIN-ом.
-        Биржи без отслеживаемых рынков не включаются. Порядок: exchange_id ASC, market_id ASC.
+        Биржи без отслеживаемых рынков не включаются. Сортировка по имени биржи и числовому ID рынка.
         Для MVP ответ без пагинации; это единая выборка на момент чтения, Cache-Control: no-store.
         Пустой результат — 200 с items: []; ошибка БД — 503, а не пустая коллекция.
 
@@ -585,11 +594,11 @@ paths:
               schema: {$ref: '#/components/schemas/TrackedMarketList'}
               example:
                 items:
-                - exchange_id: 1
+                - exchange_name: Binance
                   markets:
                   - {market_id: '42', external_id: BTCUSDT}
                   - {market_id: '43', external_id: BTCEUR}
-                - exchange_id: 3
+                - exchange_name: OKX
                   markets:
                   - {market_id: '44', external_id: BTC-USDT}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -631,6 +640,16 @@ components:
       in: path
       required: true
       schema: {$ref: '#/components/schemas/Id'}
+    ListPage:
+      name: page
+      in: query
+      description: Номер страницы, начиная с 1.
+      schema: {type: integer, format: int32, minimum: 1, maximum: 2147483647, default: 1}
+    ListPageSize:
+      name: page_size
+      in: query
+      description: Количество элементов на странице.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 10}
   responses:
     BadRequest:
       description: VALIDATION_ERROR — неверный ID (включая переполнение BIGINT), query-параметр, JSON-тело или значение/вычисленный
@@ -693,9 +712,9 @@ components:
           type: array
           items:
             type: object
-            required: [exchange_id, markets]
+            required: [exchange_name, markets]
             properties:
-              exchange_id: {$ref: '#/components/schemas/ExchangeId'}
+              exchange_name: {type: string, examples: [Binance]}
               markets:
                 type: array
                 minItems: 1
@@ -880,10 +899,17 @@ components:
       type: object
       required:
       - items
+      - next_page
       properties:
         items:
           type: array
           items: {$ref: '#/components/schemas/Subscription'}
+        next_page: {$ref: '#/components/schemas/NextListPage'}
+    NextListPage:
+      type: [integer, 'null']
+      minimum: 1
+      maximum: 2147483647
+      description: Номер следующей страницы или null. За пределами списка items будет пустым массивом.
     SubscriptionDetail:
       allOf:
       - {$ref: '#/components/schemas/Subscription'}
@@ -1001,10 +1027,12 @@ components:
       type: object
       required:
       - items
+      - next_page
       properties:
         items:
           type: array
           items: {$ref: '#/components/schemas/Alert'}
+        next_page: {$ref: '#/components/schemas/NextListPage'}
     AssetCode:
       type: string
       minLength: 1

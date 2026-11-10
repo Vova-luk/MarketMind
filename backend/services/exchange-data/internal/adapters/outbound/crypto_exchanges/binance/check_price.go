@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
-	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance/dto"
-	"marketmind/exchange-data/internal/config"
-	"marketmind/exchange-data/internal/domain"
-	"marketmind/exchange-data/internal/utils"
 	"math"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance/dto"
+	"marketmind/exchange-data/internal/config"
+	"marketmind/exchange-data/internal/domain"
 )
 
 const exchangeName = "Binance"
@@ -78,37 +79,9 @@ func (c *BinanceClient) GetPrices(ctx context.Context, symbols []string) (*domai
 		params.Set("symbols", string(data))
 	}
 
-	URL := c.baseURL + "/api/v3/ticker/price?" + params.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, URL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := utils.DoWithRetry(req, c.client, utils.RetryConfig{
-		MaxAttempts: c.maxAttempts,
-		Delay:       c.retryDelay,
-	}, c.logger)
+	responsePrices, err := c.fetchTickers(ctx, params)
 	if err != nil {
 		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	var responsePrices []dto.ExchangePrice
-	decoder := json.NewDecoder(resp.Body)
-
-	if len(validSymbols) == 1 {
-		var price dto.ExchangePrice
-		if err := decoder.Decode(&price); err != nil {
-			return nil, fmt.Errorf("decode Binance price: %w", err)
-		}
-
-		responsePrices = []dto.ExchangePrice{price}
-	} else {
-		if err := decoder.Decode(&responsePrices); err != nil {
-			return nil, fmt.Errorf("decode Binance prices: %w", err)
-		}
 	}
 
 	cryptocurrencies := make([]domain.Cryptocurrency, len(responsePrices))
@@ -143,6 +116,28 @@ func (c *BinanceClient) GetPrices(ctx context.Context, symbols []string) (*domai
 	}
 
 	return &market, nil
+}
+
+func (c *BinanceClient) fetchTickers(ctx context.Context, params url.Values) ([]dto.ExchangePrice, error) {
+	path := "/api/v3/ticker/price"
+	if len(params) > 0 {
+		path += "?" + params.Encode()
+	}
+
+	var prices []dto.ExchangePrice
+	err := c.get(ctx, path, func(body io.Reader) error {
+		decoder := json.NewDecoder(body)
+		if params.Has("symbol") {
+			var price dto.ExchangePrice
+			if err := decoder.Decode(&price); err != nil {
+				return err
+			}
+			prices = []dto.ExchangePrice{price}
+			return nil
+		}
+		return decoder.Decode(&prices)
+	})
+	return prices, err
 }
 
 func validatePrice(value string) error {

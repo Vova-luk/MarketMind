@@ -12,7 +12,8 @@ docker compose --env-file .env -f deploy/compose.yaml up --build -d
 curl -i http://localhost:8080/health
 ```
 
-Compose запускает PostgreSQL, Kafka, Kafka UI и API. Конфиг YAML монтируется в контейнер только для чтения. Логи по умолчанию пишутся в stdout
+Compose запускает PostgreSQL, Kafka, Kafka UI, API и Exchange-Data для поиска рынков.
+Конфиги API и Exchange-Data монтируются в контейнеры только для чтения. Логи по умолчанию пишутся в stdout.
 
 ```bash
 docker compose --env-file .env -f deploy/compose.yaml logs -f api
@@ -28,6 +29,36 @@ cp .env.example .env
 docker compose --env-file .env -f deploy/compose.postgres.yaml up -d --wait
 cd services
 go run ./api/cmd -config ./api/config/config.yaml -env-file ../.env
+```
+
+Для поиска рынков запустите Exchange-Data во втором терминале из `backend/services`.
+API подключается к `127.0.0.1:9090`. Адрес можно переопределить через
+`MARKETMIND_EXCHANGE_DATA__ADDRESS`.
+
+```bash
+EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
+```
+
+## Служебный gRPC-метод API
+
+`GetMarketsToCheck` возвращает рынки активных бирж с хотя бы одной подпиской,
+сгруппированные по `exchange_name`. Контракт и Go-код находятся в
+[`services/contracts/proto/api/api.proto`](services/contracts/proto/api/api.proto) и `services/gen/go/api`.
+
+Локальный адрес по умолчанию `127.0.0.1:50051`. В сети Compose метод доступен
+по `api:50051`. Для локальной проверки выполните команду из `backend/services`.
+
+```bash
+grpcurl -plaintext -import-path contracts/proto -proto api/api.proto -d '{}' \
+  127.0.0.1:50051 marketmind.api.v1.MarketCatalogService/GetMarketsToCheck
+```
+
+После изменения контракта перегенерируйте Go-код из `backend/services`.
+Команда использует `protoc`, `protoc-gen-go` и `protoc-gen-go-grpc` из `PATH`.
+
+```bash
+protoc -I contracts/proto --go_out=. --go_opt=module=marketmind \
+  --go-grpc_out=. --go-grpc_opt=module=marketmind contracts/proto/api/api.proto
 ```
 
 ## Миграции базы данных

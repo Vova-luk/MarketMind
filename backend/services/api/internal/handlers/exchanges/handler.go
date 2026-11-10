@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	domainexchanges "marketmind/api/internal/domain/exchanges"
-	"marketmind/api/internal/httpresponse"
+	"marketmind/api/internal/utils/httpresponse"
 )
 
 type Handler struct {

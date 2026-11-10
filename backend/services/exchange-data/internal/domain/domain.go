@@ -13,3 +13,9 @@ type Cryptocurrency struct {
 	Price  string
 	Error  string
 }
+
+type Instrument struct {
+	ExternalID string
+	BaseAsset  string
+	QuoteAsset string
+}

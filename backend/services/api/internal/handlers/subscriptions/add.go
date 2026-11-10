@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	domain "marketmind/api/internal/domain/subscriptions"
-	"marketmind/api/internal/httpresponse"
-	"marketmind/api/internal/requestctx"
+	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/api/internal/utils/requestctx"
 )
 
 func (h *Handler) Add(w http.ResponseWriter, r *http.Request) {

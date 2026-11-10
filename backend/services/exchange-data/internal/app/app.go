@@ -9,7 +9,9 @@ import (
 	"net/http"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
+	grpcadapter "marketmind/exchange-data/internal/adapters/inbound/grpc"
 	"marketmind/exchange-data/internal/adapters/inbound/scheduler"
 	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/binance"
 	"marketmind/exchange-data/internal/adapters/outbound/crypto_exchanges/bybit"
@@ -18,12 +20,14 @@ import (
 	"marketmind/exchange-data/internal/providers"
 	"marketmind/exchange-data/internal/server"
 	"marketmind/exchange-data/internal/service"
+	"marketmind/gen/go/exchangedata"
 )
 
 type runner interface{ Run(context.Context) error }
 
 type Application struct {
 	server    runner
+	grpc      runner
 	scheduler runner
 	kafka     io.Closer
 }
@@ -47,33 +51,47 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 		return nil, err
 	}
 
-	kafkaProvider, err := providers.NewKafkaProvider(cfg.Kafka)
-	if err != nil {
-		return nil, fmt.Errorf("create Kafka provider: %w", err)
-	}
+	binanceClient := binance.NewBinanceClient(cfg.Exchanges.Binance, logger)
+	bybitClient := bybit.NewBybitClient(cfg.Exchanges.Bybit, logger)
+	okxClient := okx.NewOKXClient(cfg.Exchanges.OKX, logger)
+	search := service.NewSearchService(map[string]service.SpotProvider{
+		"binance": binanceClient, "bybit": bybitClient, "okx": okxClient,
+	})
 
-	exchanges := map[string]service.PriceProvider{
-		"binance": binance.NewBinanceClient(cfg.Exchanges.Binance, logger),
-		"bybit":   bybit.NewBybitClient(cfg.Exchanges.Bybit, logger),
-		"okx":     okx.NewOKXClient(cfg.Exchanges.OKX, logger),
+	application := &Application{server: srv}
+	if !cfg.Scheduler.Disabled {
+		kafkaProvider, err := providers.NewKafkaProvider(cfg.Kafka)
+		if err != nil {
+			return nil, fmt.Errorf("create Kafka provider: %w", err)
+		}
+		exchanges := map[string]service.PriceProvider{"binance": binanceClient, "bybit": bybitClient, "okx": okxClient}
+		svc := service.NewService(exchanges, kafkaProvider.PriceCheckedProducer, &service.StubMarketSource{}, logger)
+		loop, err := scheduler.NewScheduler(svc, cfg.Scheduler, logger)
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("create scheduler: %w", err), kafkaProvider.Close())
+		}
+		application.scheduler = loop
+		application.kafka = kafkaProvider
 	}
-
-	svc := service.NewService(exchanges, kafkaProvider.PriceCheckedProducer, &service.StubMarketSource{}, logger)
-	loop, err := scheduler.NewScheduler(svc, cfg.Scheduler, logger)
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("create scheduler: %w", err), kafkaProvider.Close())
-	}
-	return &Application{server: srv, scheduler: loop, kafka: kafkaProvider}, nil
+	grpcServer := grpc.NewServer()
+	exchangedata.RegisterMarketSearchServiceServer(grpcServer, grpcadapter.NewSearchHandler(search, logger))
+	application.grpc = server.NewGRPC(cfg.GRPC, grpcServer, logger)
+	return application, nil
 }
 
 func (a *Application) Run(ctx context.Context) error {
 	group, runCtx := errgroup.WithContext(ctx)
 	group.Go(func() error { return runComponent(runCtx, "HTTP server", a.server) })
-	group.Go(func() error { return runComponent(runCtx, "scheduler", a.scheduler) })
+	group.Go(func() error { return runComponent(runCtx, "gRPC server", a.grpc) })
+	if a.scheduler != nil {
+		group.Go(func() error { return runComponent(runCtx, "scheduler", a.scheduler) })
+	}
 	runErr := group.Wait()
 
-	if err := a.kafka.Close(); err != nil {
-		return errors.Join(runErr, fmt.Errorf("close Kafka provider: %w", err))
+	if a.kafka != nil {
+		if err := a.kafka.Close(); err != nil {
+			return errors.Join(runErr, fmt.Errorf("close Kafka provider: %w", err))
+		}
 	}
 
 	return runErr
