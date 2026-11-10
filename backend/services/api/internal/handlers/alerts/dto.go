@@ -10,23 +10,24 @@ import (
 	domain "marketmind/api/internal/domain/alerts"
 	service "marketmind/api/internal/service/alerts"
 	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/api/pkg/alerts"
 )
 
 type alertResponse struct {
-	ID             int64  `json:"alert_id,string"`
-	Type           string `json:"type"`
-	Value          string `json:"value"`
-	Direction      string `json:"direction"`
-	ReferencePrice string `json:"reference_price"`
-	TargetPrice    string `json:"target_price"`
-	IsActive       bool   `json:"is_active"`
-	QuoteAsset     string `json:"quote_asset"`
+	ID             int64            `json:"alert_id,string"`
+	Type           alerts.Kind      `json:"type"`
+	Value          string           `json:"value"`
+	Direction      alerts.Direction `json:"direction"`
+	ReferencePrice string           `json:"reference_price"`
+	TargetPrice    string           `json:"target_price"`
+	IsActive       bool             `json:"is_active"`
+	QuoteAsset     string           `json:"quote_asset"`
 }
 
 func toResponse(result service.Result) alertResponse {
 	return alertResponse{
 		ID: result.ID, Type: result.Type, Value: result.Value,
-		Direction:      string(result.Direction),
+		Direction:      result.Direction,
 		ReferencePrice: result.ReferencePrice, TargetPrice: result.TargetPrice,
 		IsActive: result.IsActive, QuoteAsset: result.QuoteAsset,
 	}
@@ -60,8 +61,9 @@ func decodeChange(decoder *json.Decoder, allowActive bool) (service.Patch, bool)
 		return service.Patch{}, false
 	}
 
-	var kind, value *string
-	var direction *domain.Direction
+	var kind *alerts.Kind
+	var value *string
+	var direction *alerts.Direction
 	var active *bool
 	for key, raw := range fields {
 		switch key {

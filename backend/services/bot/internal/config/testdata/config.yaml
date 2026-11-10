@@ -12,8 +12,6 @@ kafka:
   input_topic: Price-Changed-Topic
 
 telegram:
-  # Set BOT_TOKEN when implementing the Telegram adapter.
-  token: ""
   api_url: https://api.telegram.org
   request_timeout: 5s
   mini_app_url: ""

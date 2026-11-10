@@ -22,6 +22,7 @@ func NewPriceChangedProducer(cfg config.KafkaConfig) *PriceChangedProducer {
 		Balancer: &kafka.Hash{}, RequiredAcks: kafka.RequireAll,
 		MaxAttempts: 3, ReadTimeout: 5 * time.Second,
 		WriteTimeout: 5 * time.Second, BatchTimeout: 100 * time.Millisecond,
+		AllowAutoTopicCreation: true,
 	}}
 }
 
@@ -33,8 +34,9 @@ func (p *PriceChangedProducer) SendPriceChangedEvent(ctx context.Context, event 
 	if err != nil {
 		return fmt.Errorf("marshal price changed event: %w", err)
 	}
+	// All notifications in an event belong to one market.
 	if err := p.writer.WriteMessages(ctx, kafka.Message{
-		Key: []byte("price-changed"), Value: data,
+		Key: []byte(event.Items[0].MarketID), Value: data,
 	}); err != nil {
 		return fmt.Errorf("publish price changed event: %w", err)
 	}

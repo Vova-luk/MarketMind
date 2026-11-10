@@ -2,7 +2,8 @@ package events
 
 import "time"
 
-// price-checked-topic
+const PricesCheckedTopic = "Price-Checked-Topic"
+
 type PricesCheckedEvent struct {
 	EventID string         `json:"event_id"`
 	Items   []CheckedPrice `json:"items"`

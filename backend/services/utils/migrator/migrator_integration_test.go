@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
+	"marketmind/api/pkg/alerts"
 	"marketmind/utils/migrations"
 )
 
@@ -148,7 +149,7 @@ func TestMigrationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, direction, reference_price)
-		VALUES ('percent', $1, 2.5, 'gte', $2)`, subscriptionID, price); err != nil {
+		VALUES ($3, $1, 2.5, $4, $2)`, subscriptionID, price, alerts.Percent, alerts.GreaterOrEqual); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {

@@ -13,8 +13,13 @@ import (
 	"marketmind/bot/internal/config"
 )
 
+const (
+	serviceName       = "bot"
+	defaultConfigPath = "bot/config/config.yaml"
+)
+
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil)).With("service", "bot")
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil)).With("service", serviceName)
 	if err := run(logger); err != nil {
 		logger.Error("bot stopped with error", slog.Any("error", err))
 		os.Exit(1)
@@ -22,7 +27,7 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	configPath := flag.String("config", "bot/config/config.yaml", "path to YAML configuration")
+	configPath := flag.String("config", defaultConfigPath, "path to YAML configuration")
 	envPath := flag.String("env-file", "", "optional path to dotenv file")
 	flag.Parse()
 	if flag.NArg() != 0 {

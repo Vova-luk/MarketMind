@@ -15,6 +15,7 @@ import (
 	alerthandlers "marketmind/api/internal/handlers/alerts"
 	userhandlers "marketmind/api/internal/handlers/users"
 	alertservice "marketmind/api/internal/service/alerts"
+	"marketmind/api/pkg/alerts"
 )
 
 type alertStoreStub struct {
@@ -87,11 +88,11 @@ func TestAlertMutationRoutes(t *testing.T) {
 		}
 		return res
 	}
-	assertDirection := func(res *httptest.ResponseRecorder, target string, direction domain.Direction) {
+	assertDirection := func(res *httptest.ResponseRecorder, target string, direction alerts.Direction) {
 		t.Helper()
 		var body struct {
 			TargetPrice string           `json:"target_price"`
-			Direction   domain.Direction `json:"direction"`
+			Direction   alerts.Direction `json:"direction"`
 		}
 		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil || body.TargetPrice != target || body.Direction != direction {
 			t.Fatalf("want target %s and direction %s, got %s (%v)", target, direction, res.Body, err)
@@ -104,7 +105,7 @@ func TestAlertMutationRoutes(t *testing.T) {
 	const createBody = `{"type":"percent","value":"5","direction":"lte"}`
 	const firstTarget = "87970.0500000000000105"
 	res := request(http.MethodPost, collection, createBody, 123, http.StatusCreated)
-	assertDirection(res, firstTarget, domain.LessOrEqual)
+	assertDirection(res, firstTarget, alerts.LessOrEqual)
 	if res.Header().Get("Location") != resource {
 		t.Fatalf("unexpected Location: %q", res.Header().Get("Location"))
 	}
@@ -118,13 +119,13 @@ func TestAlertMutationRoutes(t *testing.T) {
 
 	store.subscription.Price = "90000"
 	store.subscription.ExchangeActive = false
-	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5.0","direction":"lte"}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
-	assertDirection(request(http.MethodPatch, resource, `{"is_active":false}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5.0","direction":"lte"}`, 123, http.StatusOK), firstTarget, alerts.LessOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"is_active":false}`, 123, http.StatusOK), firstTarget, alerts.LessOrEqual)
 	request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusConflict)
 	store.subscription.ExchangeActive = true
-	assertDirection(request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
-	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5","direction":"gte"}`, 123, http.StatusOK), firstTarget, domain.GreaterOrEqual)
-	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500", domain.GreaterOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusOK), firstTarget, alerts.LessOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5","direction":"gte"}`, 123, http.StatusOK), firstTarget, alerts.GreaterOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500", alerts.GreaterOrEqual)
 
 	res = request(http.MethodDelete, resource, "", 123, http.StatusNoContent)
 	if res.Body.Len() != 0 {

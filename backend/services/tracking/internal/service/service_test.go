@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"marketmind/api/pkg/alerts"
 	"marketmind/contracts/events"
 	"marketmind/tracking/internal/domain"
 )
@@ -46,7 +47,7 @@ func fixture() (*repositoryStub, *producerStub, events.PricesCheckedEvent) {
 	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
 	r := &repositoryStub{
 		market: domain.Market{ID: 42, ExchangeName: "Binance", ExternalID: "BTCUSDT", ExchangeActive: true, Price: "99", UpdatedAt: now, BaseAsset: "BTC", QuoteAsset: "USDT"},
-		alert:  domain.Alert{AlertID: 7, MarketID: 42, TelegramUserID: 123, Type: "price", Value: "100", Direction: "gte", NotificationEnabled: true}, states: map[int64]bool{},
+		alert:  domain.Alert{AlertID: 7, MarketID: 42, TelegramUserID: 123, Type: alerts.Price, Value: "100", Direction: alerts.GreaterOrEqual, ReferencePrice: "98", NotificationEnabled: true}, states: map[int64]bool{},
 	}
 	e := events.PricesCheckedEvent{EventID: "event-1", Items: []events.CheckedPrice{{MarketID: "42", ExchangeName: "binance", ExternalID: "BTCUSDT", Price: "100", ReceivedAt: now.Add(time.Second)}}}
 	return r, &producerStub{}, e
@@ -68,10 +69,10 @@ func TestNotifications(t *testing.T) {
 				r.alert.IsNotified = true
 				e.Items[0].Price = "99"
 			case "percent":
-				r.alert.Type = "percent"
+				r.alert.Type = alerts.Percent
 				r.alert.Value = "-5"
 				r.alert.ReferencePrice = "100"
-				r.alert.Direction = "lte"
+				r.alert.Direction = alerts.LessOrEqual
 				e.Items[0].Price = "95"
 				want = 1
 			case "disabled":
@@ -92,6 +93,9 @@ func TestNotifications(t *testing.T) {
 			}
 			if want > 0 && !r.states[7] {
 				t.Fatal("notification flag not saved")
+			}
+			if want > 0 && p.items[0].ReferencePrice != r.alert.ReferencePrice {
+				t.Fatalf("reference price = %q, want %q", p.items[0].ReferencePrice, r.alert.ReferencePrice)
 			}
 			if name == "rearm" {
 				if state, ok := r.states[7]; !ok || state {

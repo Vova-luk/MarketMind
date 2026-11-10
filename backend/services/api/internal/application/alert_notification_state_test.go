@@ -6,6 +6,7 @@ import (
 
 	domain "marketmind/api/internal/domain/alerts"
 	alertservice "marketmind/api/internal/service/alerts"
+	"marketmind/api/pkg/alerts"
 )
 
 func TestUpdateAlertNotificationState(t *testing.T) {
@@ -17,10 +18,10 @@ func TestUpdateAlertNotificationState(t *testing.T) {
 		wasActive    bool
 		wantNotified bool
 	}{
-		{"value changed", &domain.Condition{Type: "percent", Value: "10", Direction: domain.GreaterOrEqual}, nil, true, false},
-		{"type changed", &domain.Condition{Type: "price", Value: "120", Direction: domain.GreaterOrEqual}, nil, true, false},
-		{"direction changed", &domain.Condition{Type: "percent", Value: "5", Direction: domain.LessOrEqual}, nil, true, false},
-		{"equivalent value", &domain.Condition{Type: "percent", Value: "5.0", Direction: domain.GreaterOrEqual}, nil, true, true},
+		{"value changed", &domain.Condition{Type: alerts.Percent, Value: "10", Direction: alerts.GreaterOrEqual}, nil, true, false},
+		{"type changed", &domain.Condition{Type: alerts.Price, Value: "120", Direction: alerts.GreaterOrEqual}, nil, true, false},
+		{"direction changed", &domain.Condition{Type: alerts.Percent, Value: "5", Direction: alerts.LessOrEqual}, nil, true, false},
+		{"equivalent value", &domain.Condition{Type: alerts.Percent, Value: "5.0", Direction: alerts.GreaterOrEqual}, nil, true, true},
 		{"re-enabled", nil, &active, false, false},
 		{"already enabled", nil, &active, true, true},
 		{"disabled", nil, &inactive, true, true},
@@ -28,7 +29,7 @@ func TestUpdateAlertNotificationState(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &alertStoreStub{
 				subscription: domain.Subscription{Price: "110", QuoteAsset: "USDT", ExchangeActive: true},
-				alert: domain.Alert{ID: 9, Condition: domain.Condition{Type: "percent", Value: "5", Direction: domain.GreaterOrEqual},
+				alert: domain.Alert{ID: 9, Condition: domain.Condition{Type: alerts.Percent, Value: "5", Direction: alerts.GreaterOrEqual},
 					ReferencePrice: "100", IsActive: tc.wasActive, IsNotified: true},
 			}
 			_, err := alertservice.NewService(store, 50).Update(context.Background(), 123, 18, 9,

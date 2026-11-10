@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"marketmind/api/pkg/alerts"
 )
 
 var ErrNotFound = errors.New("subscription not found")
@@ -24,9 +26,9 @@ type Detail struct {
 
 type Alert struct {
 	ID             int64
-	Type           string
+	Type           alerts.Kind
 	Value          string
-	Direction      string
+	Direction      alerts.Direction
 	ReferencePrice string
 	TargetPrice    string
 	IsActive       bool

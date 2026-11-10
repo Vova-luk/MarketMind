@@ -38,7 +38,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
-      interval: 5m
+      interval: 10s
       timeout: 3s
       retries: 3
       start_period: 10s
@@ -57,6 +57,54 @@ services:
       - "9090"
     volumes:
       - ../services/exchange-data/config/config.yaml:/app/config/config.yaml:ro
+    depends_on:
+      - broker-1
+      - broker-2
+    stop_grace_period: 15s
+
+  tracking:
+    build:
+      context: ..
+      dockerfile: services/tracking/Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${MARKETMIND_DATABASE__USER:-marketmind}
+      DB_PASSWORD: ${MARKETMIND_DATABASE__PASSWORD:?Set MARKETMIND_DATABASE__PASSWORD in backend/.env}
+      DB_NAME: ${MARKETMIND_DATABASE__DATABASE:-marketmind}
+      DB_SSLMODE: ${MARKETMIND_DATABASE__SSLMODE:-disable}
+      KAFKA_BROKERS: broker-1:19092,broker-2:19092
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8182/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+
+  bot:
+    profiles: [notifications]
+    build:
+      context: ..
+      dockerfile: services/bot/Dockerfile
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      BOT_KAFKA_BROKERS: broker-1:19092,broker-2:19092
+      BOT_KAFKA_WORKERS: ${BOT_KAFKA_WORKERS:-1}
+    depends_on:
+      tracking:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8183/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     stop_grace_period: 15s
 
 volumes:

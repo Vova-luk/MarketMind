@@ -21,6 +21,7 @@ import (
 	alerthandlers "marketmind/api/internal/handlers/alerts"
 	subscriptionhandlers "marketmind/api/internal/handlers/subscriptions"
 	userhandlers "marketmind/api/internal/handlers/users"
+	"marketmind/api/pkg/alerts"
 )
 
 type registerUserStub func(context.Context, domainusers.User) error
@@ -99,7 +100,7 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 	const botToken = "test-token"
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	alert := domainsubscriptions.Alert{
-		ID: 9, Type: "percent", Value: "5", Direction: "gte",
+		ID: 9, Type: alerts.Percent, Value: "5", Direction: alerts.GreaterOrEqual,
 		ReferencePrice: "83781", TargetPrice: "87970.05", IsActive: true,
 	}
 	reader := subscriptionReaderStub{

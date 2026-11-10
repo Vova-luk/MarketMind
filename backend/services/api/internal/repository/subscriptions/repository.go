@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
+	"marketmind/api/pkg/alerts"
 )
 
 type Repository struct {
@@ -59,8 +60,8 @@ func (r *Repository) getDetail(ctx context.Context, telegramUserID, subscription
 		SELECT `+subscriptionColumns+`, m.updated_at,
 		       a.id, a.type, a.value::text, a.direction, a.reference_price::text,
 		       (CASE a.type
-		           WHEN 'price' THEN a.value
-		           WHEN 'percent' THEN trim_scale(a.reference_price * (1 + a.value * 0.01))
+		           WHEN $5 THEN a.value
+		           WHEN $6 THEN trim_scale(a.reference_price * (1 + a.value * 0.01))
 		       END)::text AS target_price,
 		       a.is_active
 		`+subscriptionJoins+`
@@ -73,7 +74,7 @@ func (r *Repository) getDetail(ctx context.Context, telegramUserID, subscription
 		) AS a ON TRUE
 		WHERE u.telegram_user_id = $1 AND s.id = $2
 		ORDER BY a.id
-	`, telegramUserID, subscriptionID, alertLimit, alertOffset)
+	`, telegramUserID, subscriptionID, alertLimit, alertOffset, alerts.Price, alerts.Percent)
 	if err != nil {
 		return domainsubscriptions.Detail{}, fmt.Errorf("query subscription detail: %w", err)
 	}
@@ -83,7 +84,9 @@ func (r *Repository) getDetail(ctx context.Context, telegramUserID, subscription
 	found := false
 	for rows.Next() {
 		var alertID *int64
-		var alertType, value, direction, referencePrice, targetPrice *string
+		var alertType *alerts.Kind
+		var direction *alerts.Direction
+		var value, referencePrice, targetPrice *string
 		var isActive *bool
 		if err := rows.Scan(&detail.ID, &detail.BaseAsset, &detail.QuoteAsset,
 			&detail.ExchangeName, &detail.Price, &detail.UpdatedAt,

@@ -8,6 +8,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.yaml.in/yaml/v3"
+
+	"marketmind/contracts/events"
 )
 
 // Load applies defaults, YAML and environment overrides, then validates Config.
@@ -29,7 +31,7 @@ func Load(path string, envPaths ...string) (*Config, error) {
 	cfg := Config{
 		GRPC:      GRPCConfig{Host: "127.0.0.1", Port: 9090, ShutdownTimeout: 10 * time.Second},
 		API:       APIConfig{Address: "127.0.0.1:50051", RequestTimeout: 5 * time.Second},
-		Kafka:     KafkaConfig{Brokers: "localhost:29092,localhost:39092", PriceCheckedTopic: "Price-Checked-Topic"},
+		Kafka:     KafkaConfig{Brokers: "localhost:29092,localhost:39092", PriceCheckedTopic: events.PricesCheckedTopic},
 		Scheduler: SchedulerConfig{Interval: 10 * time.Second},
 		Exchanges: ExchangesConfig{
 			Binance: ExchangeConfig{BaseURL: "https://data-api.binance.vision", Timeout: 10 * time.Second, RetryDelay: 3 * time.Second, MaxAttempts: 3},

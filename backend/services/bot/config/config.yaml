@@ -10,9 +10,9 @@ kafka:
     - localhost:9092
   consumer_group: marketmind-bot
   input_topic: Price-Changed-Topic
+  workers: 1
 
 telegram:
-  token: "mock_mock"
   api_url: https://api.telegram.org
   request_timeout: 5s
-  mini_app_url: "http://mock.mock"
+  mini_app_url: ""

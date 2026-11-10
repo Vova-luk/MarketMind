@@ -6,19 +6,31 @@
 
 Нужны Docker с запущенным daemon и Docker Compose 2.20+.
 
+Из каталога `backend` скопируйте пример окружения, если `.env` ещё нет.
+
 ```bash
-cp .env.example .env
-docker compose --env-file .env -f deploy/compose.yaml up --build -d
+test -f .env || cp .env.example .env
+```
+
+Для запуска с уведомлениями задайте `BOT_TOKEN` в `backend/.env` и включите
+профиль `notifications`. Чтобы обрабатывать несколько партиций параллельно,
+задайте, например, `BOT_KAFKA_WORKERS=3`.
+
+```bash
+docker compose --env-file .env -f deploy/compose.yaml --profile notifications up --build -d
 curl -i http://localhost:8080/health
 ```
 
-Compose запускает PostgreSQL, Kafka, Kafka UI, API и Exchange-Data для поиска и опроса рынков.
-Конфиги API и Exchange-Data монтируются в контейнеры только для чтения. Логи по умолчанию пишутся в stdout.
+Compose запускает PostgreSQL, Kafka, Kafka UI, API, Exchange Data, Tracking и Bot.
+Kafka автоматически создаёт топики при первом обращении, а Tracking ждёт завершения миграций API.
+Для запуска без токена выполните ту же команду `up` без `--profile notifications`.
+Конфиги API и Exchange Data монтируются только для чтения. Логи по умолчанию
+пишутся в stdout.
 
 ```bash
-docker compose --env-file .env -f deploy/compose.yaml logs -f api
-docker compose --env-file .env -f deploy/compose.yaml down
-``` 
+docker compose --env-file .env -f deploy/compose.yaml --profile notifications logs -f tracking bot
+docker compose --env-file .env -f deploy/compose.yaml --profile notifications down
+```
 
 ## PostgreSQL в Docker, API локально
 
@@ -39,7 +51,7 @@ API подключается к `127.0.0.1:9090`. Адрес можно пере
 EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
 ```
 
-Для периодического опроса запустите Kafka, создайте `Price-Checked-Topic` и запустите Exchange-Data с включённым планировщиком. [Настройки планировщика](services/exchange-data/README.md#настройки-планировщика)
+Для периодического опроса запустите Kafka и Exchange Data с включённым планировщиком. Kafka создаст `Price-Checked-Topic` при первом обращении. [Настройки планировщика](services/exchange-data/README.md#настройки-планировщика)
 
 ## Служебный gRPC-метод API
 
@@ -84,9 +96,6 @@ docker compose -f deploy/compose.kafka.yaml logs -f broker-1 broker-2
 
 Kafka UI доступен на <http://localhost:8081>. В кластере `MarketMind` можно
 посмотреть топики, сообщения, брокеры и отставание групп консьюмеров.
-Контейнеры запускаются по порядку, но `depends_on` не проверяет готовность Kafka:
-перед созданием топиков дождитесь запуска обоих брокеров. Если они ещё
-запускаются, повторите команду после проверки логов.
 
 Адреса для подключения:
 
@@ -96,26 +105,14 @@ Kafka UI доступен на <http://localhost:8081>. В кластере `Mar
 Общий `deploy/compose.yaml` уже включает Kafka: при полном запуске бэкенда
 отдельно запускать её не нужно.
 
-### Создание топиков
-
-```bash
-for topic in Price-Checked-Topic Price-Changed-Topic; do
-  docker compose -f deploy/compose.kafka.yaml exec -T broker-1 \
-    /opt/kafka/bin/kafka-topics.sh \
-    --bootstrap-server broker-1:19092 \
-    --create --if-not-exists --topic "$topic" \
-    --partitions 3 --replication-factor 2
-done
-```
+### Топики
 
 `Price-Checked-Topic` передаёт цены от Exchange-Data-Service в Tracking-Service,
 а `Price-Changed-Topic` — события от Tracking-Service в Bot-Service.
-Каждый топик создаётся с тремя партициями и двумя репликами. Повторный запуск
-не удаляет данные и не меняет настройки существующих топиков.
-Создавайте топики до запуска продюсеров, чтобы Kafka не создала их автоматически
-с настройками по умолчанию.
+Брокеры автоматически создают новые топики при первом обращении с тремя
+партициями и двумя репликами. Эти значения применяются при создании топика.
 
-Проверить список топиков и реплики:
+Команды для проверки списка топиков и реплик.
 
 ```bash
 docker compose -f deploy/compose.kafka.yaml exec broker-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker-1:19092 --list

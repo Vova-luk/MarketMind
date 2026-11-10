@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
-)
 
-const (
-	Price   = "price"
-	Percent = "percent"
+	"marketmind/api/pkg/alerts"
 )
 
 var (
@@ -23,37 +20,30 @@ var (
 )
 
 type Condition struct {
-	Type      string
+	Type      alerts.Kind
 	Value     string
-	Direction Direction
+	Direction alerts.Direction
 }
 
-type Direction string
-
-const (
-	GreaterOrEqual Direction = "gte"
-	LessOrEqual    Direction = "lte"
-)
-
 func (c Condition) Validate() error {
-	if c.Direction != GreaterOrEqual && c.Direction != LessOrEqual {
-		return fmt.Errorf("%w: direction must be gte or lte", ErrInvalid)
+	if c.Direction != alerts.GreaterOrEqual && c.Direction != alerts.LessOrEqual {
+		return fmt.Errorf("%w: direction must be %s or %s", ErrInvalid, alerts.GreaterOrEqual, alerts.LessOrEqual)
 	}
 	value, ok := ParseDecimal(c.Value)
 	if !ok {
 		return fmt.Errorf("%w: value must be a decimal string", ErrInvalid)
 	}
 	switch c.Type {
-	case Price:
+	case alerts.Price:
 		if value.Sign() > 0 && value.Cmp(big.NewRat(500000, 1)) <= 0 {
 			return nil
 		}
-	case Percent:
+	case alerts.Percent:
 		if value.Sign() != 0 && value.Cmp(big.NewRat(-100, 1)) > 0 && value.Cmp(big.NewRat(500000, 1)) <= 0 {
 			return nil
 		}
 	default:
-		return fmt.Errorf("%w: type must be price or percent", ErrInvalid)
+		return fmt.Errorf("%w: type must be %s or %s", ErrInvalid, alerts.Price, alerts.Percent)
 	}
 	return fmt.Errorf("%w: value is outside the allowed range", ErrInvalid)
 }
@@ -100,9 +90,9 @@ func (a Alert) TargetPrice() (string, error) {
 		return "", fmt.Errorf("invalid stored alert value")
 	}
 	switch a.Type {
-	case Price:
+	case alerts.Price:
 		return a.Value, nil
-	case Percent:
+	case alerts.Percent:
 		reference, ok := ParseDecimal(a.ReferencePrice)
 		if !ok {
 			return "", fmt.Errorf("invalid stored alert reference price")
