@@ -26,7 +26,7 @@ type Alert struct {
 	ID             int64
 	Type           string
 	Value          string
-	Condition      string
+	Direction      string
 	ReferencePrice string
 	TargetPrice    string
 	IsActive       bool

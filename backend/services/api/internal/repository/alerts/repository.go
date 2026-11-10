@@ -67,7 +67,7 @@ func (w subscriptionTx) Rollback(ctx context.Context) error {
 func (w subscriptionTx) Get(ctx context.Context, alertID int64) (domain.Alert, error) {
 	var alert domain.Alert
 	err := w.tx.QueryRow(ctx, `
-		SELECT id, type, value::text, condition, reference_price::text, is_active
+		SELECT id, type, value::text, direction, reference_price::text, is_active
 		FROM market_mind.alerts
 		WHERE subscription_id = $1 AND id = $2
 		FOR UPDATE
@@ -85,7 +85,7 @@ func (w subscriptionTx) Get(ctx context.Context, alertID int64) (domain.Alert, e
 func (w subscriptionTx) Insert(ctx context.Context, alert domain.Alert) (int64, error) {
 	var id int64
 	err := w.tx.QueryRow(ctx, `
-		INSERT INTO market_mind.alerts (subscription_id, type, value, condition, reference_price, is_active)
+		INSERT INTO market_mind.alerts (subscription_id, type, value, direction, reference_price, is_active)
 		VALUES ($1, $2, $3::text::numeric, $4, $5::text::numeric, $6)
 		RETURNING id
 	`, w.subscriptionID, alert.Type, alert.Value, alert.Direction, alert.ReferencePrice, alert.IsActive).Scan(&id)
@@ -98,7 +98,7 @@ func (w subscriptionTx) Insert(ctx context.Context, alert domain.Alert) (int64, 
 func (w subscriptionTx) Update(ctx context.Context, alert domain.Alert) error {
 	tag, err := w.tx.Exec(ctx, `
 		UPDATE market_mind.alerts
-		SET type = $3, value = $4::text::numeric, condition = $5,
+		SET type = $3, value = $4::text::numeric, direction = $5,
 		    reference_price = $6::text::numeric, is_active = $7
 		WHERE subscription_id = $1 AND id = $2
 	`, w.subscriptionID, alert.ID, alert.Type, alert.Value, alert.Direction, alert.ReferencePrice, alert.IsActive)

@@ -87,44 +87,44 @@ func TestAlertMutationRoutes(t *testing.T) {
 		}
 		return res
 	}
-	assertCondition := func(res *httptest.ResponseRecorder, target string, direction domain.Direction) {
+	assertDirection := func(res *httptest.ResponseRecorder, target string, direction domain.Direction) {
 		t.Helper()
 		var body struct {
 			TargetPrice string           `json:"target_price"`
-			Condition   domain.Direction `json:"condition"`
+			Direction   domain.Direction `json:"direction"`
 		}
-		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil || body.TargetPrice != target || body.Condition != direction {
-			t.Fatalf("want target %s and condition %s, got %s (%v)", target, direction, res.Body, err)
+		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil || body.TargetPrice != target || body.Direction != direction {
+			t.Fatalf("want target %s and direction %s, got %s (%v)", target, direction, res.Body, err)
 		}
 		if store.alert.Direction != direction {
 			t.Fatalf("stored direction %q, want %q", store.alert.Direction, direction)
 		}
 	}
 
-	const createBody = `{"type":"percent","value":"5","condition":"lte"}`
+	const createBody = `{"type":"percent","value":"5","direction":"lte"}`
 	const firstTarget = "87970.0500000000000105"
 	res := request(http.MethodPost, collection, createBody, 123, http.StatusCreated)
-	assertCondition(res, firstTarget, domain.LessOrEqual)
+	assertDirection(res, firstTarget, domain.LessOrEqual)
 	if res.Header().Get("Location") != resource {
 		t.Fatalf("unexpected Location: %q", res.Header().Get("Location"))
 	}
 	request(http.MethodPost, collection, createBody, 123, http.StatusConflict)
-	request(http.MethodPost, collection, `{"type":"price","value":"0","condition":"gte"}`, 999, http.StatusBadRequest)
+	request(http.MethodPost, collection, `{"type":"price","value":"0","direction":"gte"}`, 999, http.StatusBadRequest)
 	request(http.MethodPost, collection, `{"type":"price","value":"100"}`, 123, http.StatusBadRequest)
-	request(http.MethodPatch, resource, `{"type":"percent","value":"-100","condition":"lte"}`, 999, http.StatusBadRequest)
-	request(http.MethodPatch, resource, `{"type":"percent","value":"5","condition":"up"}`, 123, http.StatusBadRequest)
+	request(http.MethodPatch, resource, `{"type":"percent","value":"-100","direction":"lte"}`, 999, http.StatusBadRequest)
+	request(http.MethodPatch, resource, `{"type":"percent","value":"5","direction":"up"}`, 123, http.StatusBadRequest)
 	request(http.MethodPatch, resource, `{"is_active":null}`, 123, http.StatusBadRequest)
 	request(http.MethodDelete, resource, "", 999, http.StatusNotFound)
 
 	store.subscription.Price = "90000"
 	store.subscription.ExchangeActive = false
-	assertCondition(request(http.MethodPatch, resource, `{"type":"percent","value":"5.0","condition":"lte"}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
-	assertCondition(request(http.MethodPatch, resource, `{"is_active":false}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5.0","direction":"lte"}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"is_active":false}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
 	request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusConflict)
 	store.subscription.ExchangeActive = true
-	assertCondition(request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
-	assertCondition(request(http.MethodPatch, resource, `{"type":"percent","value":"5","condition":"gte"}`, 123, http.StatusOK), firstTarget, domain.GreaterOrEqual)
-	assertCondition(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","condition":"gte"}`, 123, http.StatusOK), "85500", domain.GreaterOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusOK), firstTarget, domain.LessOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5","direction":"gte"}`, 123, http.StatusOK), firstTarget, domain.GreaterOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500", domain.GreaterOrEqual)
 
 	res = request(http.MethodDelete, resource, "", 123, http.StatusNoContent)
 	if res.Body.Len() != 0 {

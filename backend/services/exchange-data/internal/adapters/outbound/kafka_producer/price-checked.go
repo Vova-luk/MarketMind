@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"marketmind/exchange-data/internal/adapters/outbound/kafka_producer/events"
+	"marketmind/contracts/events"
 	"time"
 
 	kafka "github.com/segmentio/kafka-go"

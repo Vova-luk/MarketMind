@@ -147,7 +147,7 @@ func TestMigrationLifecycle(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO market_mind.subscriptions (user_id, market_id) VALUES ($1, $2) RETURNING id`, userID, marketID).Scan(&subscriptionID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, condition, reference_price)
+	if _, err := pool.Exec(ctx, `INSERT INTO market_mind.alerts (type, subscription_id, value, direction, reference_price)
 		VALUES ('percent', $1, 2.5, 'gte', $2)`, subscriptionID, price); err != nil {
 		t.Fatal(err)
 	}

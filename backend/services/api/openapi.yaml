@@ -307,21 +307,21 @@ paths:
                 - alert_id: '9'
                   type: percent
                   value: '5'
-                  condition: gte
+                  direction: gte
                   reference_price: '83781'
                   target_price: '87970.05'
                   is_active: true
                 - alert_id: '10'
                   type: percent
                   value: '-5'
-                  condition: lte
+                  direction: lte
                   reference_price: '83781'
                   target_price: '79591.95'
                   is_active: false
                 - alert_id: '11'
                   type: price
                   value: '83000'
-                  condition: lte
+                  direction: lte
                   reference_price: '83781'
                   target_price: '83000'
                   is_active: true
@@ -378,7 +378,7 @@ paths:
                     - alert_id: '9'
                       type: percent
                       value: '5'
-                      condition: gte
+                      direction: gte
                       reference_price: '83781'
                       target_price: '87970.05'
                       is_active: true
@@ -386,7 +386,7 @@ paths:
                     - alert_id: '10'
                       type: percent
                       value: '-5'
-                      condition: lte
+                      direction: lte
                       reference_price: '83781'
                       target_price: '79591.95'
                       is_active: false
@@ -394,7 +394,7 @@ paths:
                     - alert_id: '11'
                       type: price
                       value: '83000'
-                      condition: lte
+                      direction: lte
                       reference_price: '83781'
                       target_price: '83000'
                       is_active: true
@@ -415,7 +415,7 @@ paths:
       operationId: createAlert
       summary: Добавить активный алерт на рынок
       description: |
-        Клиент передаёт type, value и condition. Сервер читает последнюю сохранённую цену из
+        Клиент передаёт type, value и direction. Сервер читает последнюю сохранённую цену из
         markets.price и фиксирует её в alerts.reference_price. Размер JSON-тела — до 8 КиБ.
         Для price value — положительная целевая цена в quote_asset подписки: target_price = value.
         reference_price и target_price также измеряются в quote_asset. Код валюты берётся из рынка,
@@ -425,7 +425,7 @@ paths:
         target_price = reference_price * (1 + value / 100).
         Нулевой процент и падение на 100% или больше запрещены.
         Целевая цена должна быть в (0; 500000] единиц quote_asset (текущий лимит, без пересчёта в USD). Вычисления десятичные, без float64.
-        Сервер сохраняет переданный condition. Он задаёт направление пересечения независимо от цели.
+        Сервер сохраняет переданный direction. Он задаёт направление пересечения независимо от цели.
         Требуются активная биржа, положительная сохранённая цена и место в лимите активных алертов.
         Создание само по себе не отправляет уведомление: отслеживаются последующие пересечения.
         POST не идемпотентен: повтор создаёт ещё один алерт. После тайм-аута клиент
@@ -438,13 +438,13 @@ paths:
             examples:
               price:
                 summary: Достичь 83000 USDT; при исходной цене 83781 это падение
-                value: {type: price, value: '83000', condition: lte}
+                value: {type: price, value: '83000', direction: lte}
               percentUp:
                 summary: Рост на 5% от цены при создании
-                value: {type: percent, value: '5', condition: gte}
+                value: {type: percent, value: '5', direction: gte}
               percentDown:
                 summary: Падение на 5% от цены при создании
-                value: {type: percent, value: '-5', condition: lte}
+                value: {type: percent, value: '-5', direction: lte}
       responses:
         '201':
           description: Создан новый активный алерт.
@@ -462,7 +462,7 @@ paths:
                 alert_id: '9'
                 type: percent
                 value: '5'
-                condition: gte
+                direction: gte
                 reference_price: '83781'
                 target_price: '87970.05'
                 is_active: true
@@ -488,10 +488,10 @@ paths:
       operationId: updateAlert
       summary: Изменить условие или включить и выключить алерт
       description: |
-        Передаётся is_active и/или полный набор type, value, condition. Пустое тело, null
+        Передаётся is_active и/или полный набор type, value, direction. Пустое тело, null
         и неполный набор условия — 400 VALIDATION_ERROR. Размер JSON-тела — до 8 КиБ.
         При фактическом изменении type/value сервер фиксирует новую reference_price из markets.price.
-        Если меняется только направление condition, база и цель сохраняются.
+        Если меняется только направление direction, база и цель сохраняются.
         Значения "5" и "5.0" считаются одинаковыми.
         Изменение только is_active сохраняет исходную цену, цель и направление.
         Для изменения условия и включения нужны активная биржа и положительная сохранённая цена;
@@ -509,7 +509,7 @@ paths:
               disable:
                 value: {is_active: false}
               change:
-                value: {type: percent, value: '-5', condition: lte}
+                value: {type: percent, value: '-5', direction: lte}
       responses:
         '200':
           description: Алерт после изменения.
@@ -520,7 +520,7 @@ paths:
                 alert_id: '9'
                 type: percent
                 value: '5'
-                condition: gte
+                direction: gte
                 reference_price: '83781'
                 target_price: '87970.05'
                 is_active: false
@@ -925,11 +925,11 @@ components:
       required:
       - type
       - value
-      - condition
+      - direction
       properties:
         type: {$ref: '#/components/schemas/AlertType'}
         value: {$ref: '#/components/schemas/Decimal'}
-        condition: {$ref: '#/components/schemas/AlertDirection'}
+        direction: {$ref: '#/components/schemas/AlertDirection'}
       additionalProperties: false
       allOf:
       - {$ref: '#/components/schemas/AlertValueRules'}
@@ -938,7 +938,7 @@ components:
       properties:
         type: {$ref: '#/components/schemas/AlertType'}
         value: {$ref: '#/components/schemas/Decimal'}
-        condition: {$ref: '#/components/schemas/AlertDirection'}
+        direction: {$ref: '#/components/schemas/AlertDirection'}
         is_active: {type: boolean}
       additionalProperties: false
       allOf:
@@ -953,19 +953,19 @@ components:
           - required:
             - value
           - required:
-            - condition
+            - direction
       - required:
         - type
         - value
-        - condition
-      description: Только is_active либо полный набор type, value, condition с необязательным is_active.
+        - direction
+      description: Только is_active либо полный набор type, value, direction с необязательным is_active.
     SubscriptionAlert:
       type: object
       required:
       - alert_id
       - type
       - value
-      - condition
+      - direction
       - reference_price
       - target_price
       - is_active
@@ -973,7 +973,7 @@ components:
         alert_id: {$ref: '#/components/schemas/Id'}
         type: {$ref: '#/components/schemas/AlertType'}
         value: {$ref: '#/components/schemas/Decimal'}
-        condition: {$ref: '#/components/schemas/AlertDirection'}
+        direction: {$ref: '#/components/schemas/AlertDirection'}
         reference_price:
           $ref: '#/components/schemas/PositiveDecimal'
           description: Цена пары в момент создания алерта или изменения его условия.

@@ -51,7 +51,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for _, alert := range detail.Alerts {
 		items = append(items, alertResponse{
 			ID: alert.ID, Type: alert.Type, Value: alert.Value,
-			Condition:      alert.Condition,
+			Direction:      alert.Direction,
 			ReferencePrice: alert.ReferencePrice, TargetPrice: alert.TargetPrice,
 			IsActive: alert.IsActive, QuoteAsset: detail.QuoteAsset,
 		})

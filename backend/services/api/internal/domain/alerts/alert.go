@@ -37,7 +37,7 @@ const (
 
 func (c Condition) Validate() error {
 	if c.Direction != GreaterOrEqual && c.Direction != LessOrEqual {
-		return fmt.Errorf("%w: condition must be gte or lte", ErrInvalid)
+		return fmt.Errorf("%w: direction must be gte or lte", ErrInvalid)
 	}
 	value, ok := ParseDecimal(c.Value)
 	if !ok {
