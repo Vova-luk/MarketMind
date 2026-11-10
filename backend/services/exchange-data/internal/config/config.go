@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
 	GRPC      GRPCConfig      `yaml:"grpc"`
+	API       APIConfig       `yaml:"api"`
 	Kafka     KafkaConfig     `yaml:"kafka"`
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 	Exchanges ExchangesConfig `yaml:"exchanges"`
@@ -27,6 +28,11 @@ type GRPCConfig struct {
 	Host            string        `yaml:"host"`
 	Port            int           `yaml:"port"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+}
+
+type APIConfig struct {
+	Address        string        `yaml:"address"`
+	RequestTimeout time.Duration `yaml:"request_timeout"`
 }
 
 type KafkaConfig struct {
@@ -49,8 +55,9 @@ func (c KafkaConfig) BrokerList() []string {
 }
 
 type SchedulerConfig struct {
-	Interval time.Duration `yaml:"interval"`
-	Disabled bool          `yaml:"disabled"`
+	Interval  time.Duration `yaml:"interval"`
+	Disabled  bool          `yaml:"disabled"`
+	Exchanges []string      `yaml:"exchanges"`
 }
 
 type ExchangesConfig struct {
@@ -92,6 +99,14 @@ func (c Config) Validate() error {
 	}
 	if c.Scheduler.Interval <= 0 {
 		return fmt.Errorf("scheduler interval must be positive")
+	}
+	if !c.Scheduler.Disabled {
+		if strings.TrimSpace(c.API.Address) == "" || c.API.RequestTimeout <= 0 {
+			return fmt.Errorf("api.address and a positive api.request_timeout are required for the scheduler")
+		}
+		if c.Scheduler.Exchanges != nil && len(c.Scheduler.Exchanges) == 0 {
+			return fmt.Errorf("scheduler.exchanges must contain at least one exchange")
+		}
 	}
 	for _, exchange := range []struct {
 		name string

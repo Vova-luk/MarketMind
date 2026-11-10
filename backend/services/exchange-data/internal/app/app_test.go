@@ -21,6 +21,7 @@ func TestApplicationClosesKafkaAfterAllComponentsStop(t *testing.T) {
 	started := make(chan struct{}, 3)
 	serverStopped, grpcStopped, schedulerStopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	closed := 0
+	apiClosed := 0
 	application := &Application{
 		server: runnerFunc(func(ctx context.Context) error {
 			defer close(serverStopped)
@@ -59,6 +60,15 @@ func TestApplicationClosesKafkaAfterAllComponentsStop(t *testing.T) {
 			closed++
 			return nil
 		}),
+		apiConn: closeFunc(func() error {
+			select {
+			case <-schedulerStopped:
+			default:
+				t.Error("API connection closed before in-flight price checks stopped")
+			}
+			apiClosed++
+			return nil
+		}),
 	}
 	done := make(chan error, 1)
 	go func() { done <- application.Run(ctx) }()
@@ -78,8 +88,8 @@ func TestApplicationClosesKafkaAfterAllComponentsStop(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("shutdown blocked")
 	}
-	if closed != 1 {
-		t.Fatalf("Kafka close calls=%d", closed)
+	if closed != 1 || apiClosed != 1 {
+		t.Fatalf("close calls: Kafka=%d, API=%d", closed, apiClosed)
 	}
 }
 

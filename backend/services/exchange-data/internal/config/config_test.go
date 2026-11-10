@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ func clearExchangeEnv(t *testing.T) {
 		"EXCHANGE_DATA_SERVER_HOST", "EXCHANGE_DATA_SERVER_PORT", "EXCHANGE_DATA_SERVER_READ_TIMEOUT",
 		"EXCHANGE_DATA_SERVER_WRITE_TIMEOUT", "EXCHANGE_DATA_SERVER_SHUTDOWN_TIMEOUT",
 		"EXCHANGE_DATA_GRPC_HOST", "EXCHANGE_DATA_GRPC_PORT", "EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT",
+		"EXCHANGE_DATA_API_ADDRESS", "EXCHANGE_DATA_API_REQUEST_TIMEOUT",
 		"EXCHANGE_DATA_KAFKA_BROKERS", "EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "EXCHANGE_DATA_POLL_INTERVAL", "EXCHANGE_DATA_SCHEDULER_DISABLED",
 		"EXCHANGE_DATA_BINANCE_BASE_URL", "EXCHANGE_DATA_BINANCE_TIMEOUT",
 		"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "EXCHANGE_DATA_BINANCE_MAX_ATTEMPTS",
@@ -42,6 +44,9 @@ func TestLoadConfigWithoutExternalConnections(t *testing.T) {
 	}
 	if cfg.Scheduler.Interval != 10*time.Second || cfg.Exchanges.Binance.BaseURL != "https://data-api.binance.vision" || cfg.Exchanges.Bybit.Timeout != 5*time.Second || cfg.Exchanges.OKX.BaseURL != "https://www.okx.com" {
 		t.Fatal("scheduler or exchange settings were not decoded")
+	}
+	if cfg.API.Address != "127.0.0.1:50051" || cfg.API.RequestTimeout != 5*time.Second || !slices.Equal(cfg.Scheduler.Exchanges, []string{"binance", "okx"}) {
+		t.Fatal("market catalog settings or scheduler exchange list were not decoded")
 	}
 }
 
@@ -95,6 +100,8 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 		{"EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", ""},
 		{"EXCHANGE_DATA_POLL_INTERVAL", "0s"},
 		{"EXCHANGE_DATA_SCHEDULER_DISABLED", "invalid"},
+		{"EXCHANGE_DATA_API_ADDRESS", ""},
+		{"EXCHANGE_DATA_API_REQUEST_TIMEOUT", "0s"},
 		{"EXCHANGE_DATA_BINANCE_BASE_URL", "invalid"},
 		{"EXCHANGE_DATA_BINANCE_TIMEOUT", "0s"},
 		{"EXCHANGE_DATA_BINANCE_RETRY_DELAY", "-1s"},

@@ -27,10 +27,10 @@ type Publisher interface {
 }
 
 type Service struct {
-	exchanges map[string]PriceProvider
-	publisher Publisher
-	fakeAPI   MarketSource
-	logger    *slog.Logger
+	exchanges    map[string]PriceProvider
+	publisher    Publisher
+	marketSource MarketSource
+	logger       *slog.Logger
 }
 
 func NewService(exchanges map[string]PriceProvider, publisher Publisher, marketSource MarketSource, logger *slog.Logger) *Service {
@@ -38,10 +38,10 @@ func NewService(exchanges map[string]PriceProvider, publisher Publisher, marketS
 		logger = slog.Default()
 	}
 	return &Service{
-		exchanges: exchanges,
-		publisher: publisher,
-		fakeAPI:   marketSource,
-		logger:    logger,
+		exchanges:    exchanges,
+		publisher:    publisher,
+		marketSource: marketSource,
+		logger:       logger,
 	}
 }
 
@@ -50,7 +50,7 @@ func (s *Service) CheckPrices(ctx context.Context) error {
 		return err
 	}
 
-	items, err := s.fakeAPI.GetMarketsToCheck(ctx)
+	items, err := s.marketSource.GetMarketsToCheck(ctx)
 	if err != nil {
 		return fmt.Errorf("get markets to check: %w", err)
 	}
@@ -61,7 +61,8 @@ func (s *Service) CheckPrices(ctx context.Context) error {
 	var wg sync.WaitGroup
 
 	for i, item := range items {
-		if len(item.Markets) == 0 {
+		client := s.exchanges[strings.ToLower(strings.TrimSpace(item.ExchangeName))]
+		if len(item.Markets) == 0 || client == nil {
 			continue
 		}
 		select {
@@ -72,11 +73,11 @@ func (s *Service) CheckPrices(ctx context.Context) error {
 		}
 
 		wg.Add(1)
-		go func(index int, item ExchangeMarkets) {
+		go func(index int, markets []MarketToCheck) {
 			defer wg.Done()
 			defer func() { <-slots }()
-			results[index] = s.checkExchange(ctx, item)
-		}(i, item)
+			results[index] = checkExchange(ctx, client, markets)
+		}(i, item.Markets)
 	}
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
@@ -87,7 +88,7 @@ func (s *Service) CheckPrices(ctx context.Context) error {
 	var failures []error
 
 	for i, result := range results {
-		if len(items[i].Markets) == 0 {
+		if result.prices == nil && result.err == nil {
 			continue
 		}
 		exchange := strings.ToLower(strings.TrimSpace(items[i].ExchangeName))
@@ -126,20 +127,13 @@ func (s *Service) CheckPrices(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) checkExchange(ctx context.Context, item ExchangeMarkets) exchangeResult {
+func checkExchange(ctx context.Context, client PriceProvider, markets []MarketToCheck) exchangeResult {
 	if err := ctx.Err(); err != nil {
 		return exchangeResult{err: err}
 	}
-	exchange := strings.ToLower(strings.TrimSpace(item.ExchangeName))
-	client, ok := s.exchanges[exchange]
+	symbols := make([]string, 0, len(markets))
 
-	if !ok || client == nil {
-		return exchangeResult{err: fmt.Errorf("unsupported exchange: %q", exchange)}
-	}
-
-	symbols := make([]string, 0, len(item.Markets))
-
-	for _, market := range item.Markets {
+	for _, market := range markets {
 		symbol := strings.TrimSpace(market.ExternalID)
 		if symbol != "" && strings.TrimSpace(market.MarketID) != "" {
 			symbols = append(symbols, symbol)

@@ -7,9 +7,9 @@
 а последующие проверки продолжаются. `/health` подтверждает работу HTTP-сервера,
 но не доступность бирж или Kafka.
 
-Пока список рынков возвращает `StubMarketSource`: BTCUSDT на Binance и Bybit,
-BTC-USDT на OKX. Market ID 42/43/44 — учебные, поэтому такой запуск предназначен
-для разработки, а не для отправки в рабочий tracking с настоящими подписками.
+В каждом цикле планировщик вызывает `GetMarketsToCheck` у API по gRPC. API возвращает
+рынки активных бирж с подписками пользователей. Exchange-Data опрашивает включённые
+в настройках биржи и публикует полученные цены в `Price-Checked-Topic`.
 
 Из `backend/services`:
 
@@ -43,7 +43,24 @@ go test -race ./exchange-data/...
 - `internal/adapters/inbound/grpc` — место для gRPC-запросов от API-Service.
 - `internal/adapters/inbound/scheduler` — место для периодического обновления котировок.
 - `internal/adapters/outbound/crypto_exchanges` — места для клиентов Binance, Bybit и OKX.
+- `internal/adapters/outbound/market_catalog` — gRPC-клиент `GetMarketsToCheck`.
 - `internal/adapters/outbound/kafka_producer` — место для публикации в `Price-Checked-Topic`.
+
+## Настройки планировщика
+
+```yaml
+api:
+  address: "127.0.0.1:50051"
+  request_timeout: 5s
+scheduler:
+  interval: 10s
+  exchanges: [binance, bybit, okx]
+```
+
+`scheduler.exchanges` задаёт биржи для опроса. При отсутствии списка используются
+все поддерживаемые клиенты. В Compose Exchange-Data обращается к API по `api:50051`.
+Настройки адреса, таймаута и интервала можно переопределить переменными
+`EXCHANGE_DATA_API_ADDRESS`, `EXCHANGE_DATA_API_REQUEST_TIMEOUT` и `EXCHANGE_DATA_POLL_INTERVAL`.
 
 ## Поиск рынков по gRPC
 
@@ -62,11 +79,10 @@ grpcurl -plaintext -import-path proto -proto exchange-data/search.proto \
 
 Метаданные пар кэшируются на минуту, последние цены на пять секунд. Поиск
 использует публичные данные бирж. Чтобы запустить только HTTP и gRPC, задайте
-`EXCHANGE_DATA_SCHEDULER_DISABLED=true`. Compose запускает Exchange-Data в этом режиме.
+`EXCHANGE_DATA_SCHEDULER_DISABLED=true`.
 
 По Ctrl+C или SIGTERM общий контекст отменяется: прекращаются запросы и ожидания,
-завершаются планировщик, HTTP и gRPC, затем закрывается Kafka writer.
-Пока эти компоненты не остановились, producer не закрывается.
+завершаются планировщик, HTTP и gRPC, затем закрываются Kafka writer и соединение с API.
 
 ## Настройки Binance
 
@@ -130,13 +146,16 @@ ENV-переопределения: `EXCHANGE_DATA_KAFKA_BROKERS` и
 
 ## Проверка полного сценария
 
-Сначала поднимите Kafka и Kafka UI из `backend/`:
+Для локальной проверки поднимите Kafka и запустите API с gRPC на `127.0.0.1:50051`.
+Добавьте хотя бы одну подписку на рынок включённой биржи. [Запуск API](../../README.md)
+
+Выполните из `backend/`.
 
 ```bash
 docker compose -f deploy/compose.kafka.yaml up -d
 ```
 
-После готовности брокеров создайте отдельный топик для учебных ID заглушки:
+После готовности брокеров создайте отдельный топик для проверки.
 
 ```bash
 docker compose -f deploy/compose.kafka.yaml exec broker-1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker-1:19092 --create --if-not-exists --topic exchange-data-smoke --partitions 1 --replication-factor 2

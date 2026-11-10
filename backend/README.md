@@ -12,7 +12,7 @@ docker compose --env-file .env -f deploy/compose.yaml up --build -d
 curl -i http://localhost:8080/health
 ```
 
-Compose запускает PostgreSQL, Kafka, Kafka UI, API и Exchange-Data для поиска рынков.
+Compose запускает PostgreSQL, Kafka, Kafka UI, API и Exchange-Data для поиска и опроса рынков.
 Конфиги API и Exchange-Data монтируются в контейнеры только для чтения. Логи по умолчанию пишутся в stdout.
 
 ```bash
@@ -38,6 +38,8 @@ API подключается к `127.0.0.1:9090`. Адрес можно пере
 ```bash
 EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
 ```
+
+Для периодического опроса запустите Kafka, создайте `Price-Checked-Topic` и запустите Exchange-Data с включённым планировщиком. [Настройки планировщика](services/exchange-data/README.md#настройки-планировщика)
 
 ## Служебный gRPC-метод API
 

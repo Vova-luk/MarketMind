@@ -17,6 +17,7 @@ kafka:
 
 scheduler:
   interval: 10s
+  exchanges: [binance, okx]
 
 exchanges:
   binance:
