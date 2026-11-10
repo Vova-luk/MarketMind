@@ -12,7 +12,6 @@ import (
 	"marketmind/api/internal/handlers/subscriptions"
 	"marketmind/api/internal/handlers/users"
 	"marketmind/api/internal/middleware"
-	"marketmind/api/internal/utils/httpresponse"
 )
 
 func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler, exchangeHandler *exchanges.Handler, subscriptionHandler *subscriptions.Handler, alertHandler *alerts.Handler, marketHandler *markets.Handler) *chi.Mux {
@@ -24,9 +23,9 @@ func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler,
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Use(middleware.AuthenticateTelegram(botToken))
 		api.Post("/users/me", userHandler.Register)
-		api.With(userHandler.RequireRegistered).Get("/markets", marketHandler.Search)
 		api.Group(func(registered chi.Router) {
-			registered.Use(userHandler.RequireRegistered, rejectQueryParameters)
+			registered.Use(userHandler.RequireRegistered)
+			registered.Get("/markets", marketHandler.Search)
 			registered.Get("/exchanges", exchangeHandler.List)
 			registered.Get("/subscriptions", subscriptionHandler.List)
 			registered.Post("/subscriptions", subscriptionHandler.Add)
@@ -39,14 +38,4 @@ func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler,
 		})
 	})
 	return router
-}
-
-func rejectQueryParameters(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RawQuery != "" {
-			httpresponse.WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "This endpoint accepts no query parameters")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

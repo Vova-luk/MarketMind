@@ -22,8 +22,9 @@ info:
     UI передаёт выбранный результат поиска для добавления. Отслеживаемое возвращает subscription_id
     для открытия карточки, удаления подписки и управления алертами.
 
-    Неизвестные поля JSON/query, повторяющиеся
-    query-параметры и неверные значения отклоняются с 400 VALIDATION_ERROR.
+    Неизвестные поля JSON и неверные значения отклоняются с 400 VALIDATION_ERROR.
+    Операции с query-параметрами отклоняют неизвестные параметры, повторы и неверные значения.
+    Остальные операции игнорируют строку запроса.
     Для JSON-тела нужен Content-Type: application/json (иначе 415).
     POST /users/me не читает тело запроса.
 
@@ -94,7 +95,6 @@ paths:
                 items:
                 - {id: 1, name: Binance}
         '401': {$ref: '#/components/responses/Unauthorized'}
-        '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {$ref: '#/components/responses/Unavailable'}
