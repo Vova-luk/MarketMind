@@ -6,3 +6,9 @@ type Instrument struct {
 	QuoteAsset string
 	Price      *string
 }
+
+type TrackedMarket struct {
+	ExchangeName string
+	MarketID     int64
+	ExternalID   string
+}

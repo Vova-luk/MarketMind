@@ -8,8 +8,9 @@ info:
     Остальные операции требуют регистрации (иначе 404 USER_NOT_REGISTERED).
     Пользователь определяется только по проверенному initData.
     Ответы Mini App персональные: Cache-Control: no-store.
-    Служебная ручка /internal/v1/tracked-markets использует отдельный сервисный токен,
-    не требует Telegram initData и возвращает рынки всех пользователей.
+    Служебный метод gRPC marketmind.api.v1.MarketCatalogService/GetMarketsToCheck
+    возвращает рынки всех пользователей.
+    Контракт метода находится в ../proto/api/api.proto.
 
     Единица отслеживания — spot-рынок (биржа + base_asset + quote_asset).
     Поддерживаются валюты котировки доступных биржевых пар, не только USDT.
@@ -569,12 +570,12 @@ paths:
       security:
       - ServiceToken: []
       description: |
-        Exchange-Data вызывает GET /internal/v1/tracked-markets в API по расписанию.
+        Планируемый HTTP-вариант служебного метода gRPC MarketCatalogService/GetMarketsToCheck.
         API читает БД и возвращает полный текущий список рынков активных бирж,
         на которые есть хотя бы одна подписка. Пользователь и наличие активных алертов
         не ограничивают выборку. Рынок включается один раз независимо от числа подписок.
         Используется EXISTS по subscriptions.market_id, без размножения строк JOIN-ом.
-        Биржи без отслеживаемых рынков не включаются. Порядок: exchange_id ASC, market_id ASC.
+        Биржи без отслеживаемых рынков не включаются. Сортировка по имени биржи и числовому ID рынка.
         Для MVP ответ без пагинации; это единая выборка на момент чтения, Cache-Control: no-store.
         Пустой результат — 200 с items: []; ошибка БД — 503, а не пустая коллекция.
 
@@ -594,11 +595,11 @@ paths:
               schema: {$ref: '#/components/schemas/TrackedMarketList'}
               example:
                 items:
-                - exchange_id: 1
+                - exchange_name: Binance
                   markets:
                   - {market_id: '42', external_id: BTCUSDT}
                   - {market_id: '43', external_id: BTCEUR}
-                - exchange_id: 3
+                - exchange_name: OKX
                   markets:
                   - {market_id: '44', external_id: BTC-USDT}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -712,9 +713,9 @@ components:
           type: array
           items:
             type: object
-            required: [exchange_id, markets]
+            required: [exchange_name, markets]
             properties:
-              exchange_id: {$ref: '#/components/schemas/ExchangeId'}
+              exchange_name: {type: string, examples: [Binance]}
               markets:
                 type: array
                 minItems: 1

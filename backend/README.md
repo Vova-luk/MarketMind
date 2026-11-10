@@ -30,6 +30,28 @@ cd services
 go run ./api/cmd -config ./api/config/config.yaml -env-file ../.env
 ```
 
+## Служебный gRPC-метод API
+
+`GetMarketsToCheck` возвращает рынки активных бирж с хотя бы одной подпиской,
+сгруппированные по `exchange_name`. Контракт и Go-код находятся в
+[`services/proto/api/api.proto`](services/proto/api/api.proto) и `services/gen/go/api`.
+
+Локальный адрес по умолчанию `127.0.0.1:50051`. В сети Compose метод доступен
+по `api:50051`. Для локальной проверки выполните команду из `backend/services`.
+
+```bash
+grpcurl -plaintext -import-path proto -proto api/api.proto -d '{}' \
+  127.0.0.1:50051 marketmind.api.v1.MarketCatalogService/GetMarketsToCheck
+```
+
+После изменения контракта перегенерируйте Go-код из `backend/services`.
+Команда использует `protoc`, `protoc-gen-go` и `protoc-gen-go-grpc` из `PATH`.
+
+```bash
+protoc -I proto --go_out=. --go_opt=module=marketmind \
+  --go-grpc_out=. --go-grpc_opt=module=marketmind proto/api/api.proto
+```
+
 ## Миграции базы данных
 
 API автоматически применяет миграции после подключения к PostgreSQL и до

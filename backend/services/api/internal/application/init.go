@@ -19,6 +19,7 @@ import (
 	alertservice "marketmind/api/internal/service/alerts"
 	marketservice "marketmind/api/internal/service/markets"
 	subscriptionservice "marketmind/api/internal/service/subscriptions"
+	"marketmind/gen/go/api"
 	"marketmind/utils/logger"
 	"marketmind/utils/migrator"
 	"marketmind/utils/postgres"
@@ -93,6 +94,26 @@ func (a *Application) initServer() error {
 		return err
 	}
 	a.server = srv
+	a.shutdownFuncs = append(a.shutdownFuncs, srv.Shutdown)
+	return nil
+}
+
+func (a *Application) initGRPC() error {
+	var cfg server.GRPCConfig
+	if err := a.config.Unmarshal("grpc", &cfg); err != nil {
+		return fmt.Errorf("read gRPC config: %w", err)
+	}
+	if cfg.Port == 0 {
+		return nil
+	}
+	srv, err := server.NewGRPC(cfg)
+	if err != nil {
+		return err
+	}
+	repository := subscriptionrepository.NewRepository(a.database)
+	handler := markethandlers.NewCatalogHandler(repository, a.logger)
+	api.RegisterMarketCatalogServiceServer(srv, handler)
+	a.grpcServer = srv
 	a.shutdownFuncs = append(a.shutdownFuncs, srv.Shutdown)
 	return nil
 }

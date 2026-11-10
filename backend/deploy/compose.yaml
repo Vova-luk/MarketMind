@@ -15,6 +15,8 @@ services:
     environment:
       MARKETMIND_SERVER__HOST: 0.0.0.0
       MARKETMIND_SERVER__PORT: "8080"
+      MARKETMIND_GRPC__HOST: 0.0.0.0
+      MARKETMIND_GRPC__PORT: "50051"
       MARKETMIND_DATABASE__HOST: postgres
       MARKETMIND_DATABASE__PORT: "5432"
       MARKETMIND_DATABASE__USER: ${MARKETMIND_DATABASE__USER:-marketmind}
@@ -23,6 +25,8 @@ services:
       MARKETMIND_LOGGER__FILE: /app/logs/api.log
     ports:
       - "${MARKETMIND_SERVER__PORT:-8080}:8080"
+    expose:
+      - "50051"
     volumes:
       - ../services/api/config/config.yaml:/app/config/config.yaml:ro
       - api_logs:/app/logs
