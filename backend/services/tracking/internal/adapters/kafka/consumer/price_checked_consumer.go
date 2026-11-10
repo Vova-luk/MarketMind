@@ -22,7 +22,7 @@ type PriceCheckedConsumer struct {
 	logger  *slog.Logger
 }
 
-func NewPriceCheckedConsumer(cfg config.KafkaConfig, logger *slog.Logger) *PriceCheckedConsumer {
+func NewPriceCheckedConsumer(cfg config.KafkaConfig, handler PriceCheckedHandler, logger *slog.Logger) *PriceCheckedConsumer {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -34,6 +34,7 @@ func NewPriceCheckedConsumer(cfg config.KafkaConfig, logger *slog.Logger) *Price
 			GroupID: cfg.GroupID,
 		}),
 		topic: cfg.PriceCheckedTopic,
+		handler: handler,
 
 		logger: logger,
 	}

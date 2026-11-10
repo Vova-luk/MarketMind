@@ -67,12 +67,12 @@ func (w subscriptionTx) Rollback(ctx context.Context) error {
 func (w subscriptionTx) Get(ctx context.Context, alertID int64) (domain.Alert, error) {
 	var alert domain.Alert
 	err := w.tx.QueryRow(ctx, `
-		SELECT id, type, value::text, direction, reference_price::text, is_active
+		SELECT id, type, value::text, direction, reference_price::text, is_active, is_notified
 		FROM market_mind.alerts
 		WHERE subscription_id = $1 AND id = $2
 		FOR UPDATE
 	`, w.subscriptionID, alertID).
-		Scan(&alert.ID, &alert.Type, &alert.Value, &alert.Direction, &alert.ReferencePrice, &alert.IsActive)
+		Scan(&alert.ID, &alert.Type, &alert.Value, &alert.Direction, &alert.ReferencePrice, &alert.IsActive, &alert.IsNotified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Alert{}, domain.ErrNotFound
 	}
@@ -99,9 +99,9 @@ func (w subscriptionTx) Update(ctx context.Context, alert domain.Alert) error {
 	tag, err := w.tx.Exec(ctx, `
 		UPDATE market_mind.alerts
 		SET type = $3, value = $4::text::numeric, direction = $5,
-		    reference_price = $6::text::numeric, is_active = $7
+		    reference_price = $6::text::numeric, is_active = $7, is_notified = $8
 		WHERE subscription_id = $1 AND id = $2
-	`, w.subscriptionID, alert.ID, alert.Type, alert.Value, alert.Direction, alert.ReferencePrice, alert.IsActive)
+	`, w.subscriptionID, alert.ID, alert.Type, alert.Value, alert.Direction, alert.ReferencePrice, alert.IsActive, alert.IsNotified)
 	if err != nil {
 		return fmt.Errorf("update alert: %w", err)
 	}

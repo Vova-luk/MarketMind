@@ -63,6 +63,7 @@ type Alert struct {
 	Condition
 	ReferencePrice string
 	IsActive       bool
+	IsNotified     bool
 }
 
 type Subscription struct {

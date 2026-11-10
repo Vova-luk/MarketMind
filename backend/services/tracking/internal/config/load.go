@@ -35,7 +35,7 @@ func Load(path string, envPaths ...string) (*Config, error) {
 			ConnectTimeout: 5 * time.Second,
 		},
 		Kafka: KafkaConfig{
-			Brokers: []string{"localhost:9092"}, GroupID: "marketmind-tracking",
+			Brokers: []string{"localhost:29092", "localhost:39092"}, GroupID: "marketmind-tracking",
 			PriceCheckedTopic: "Price-Checked-Topic", PriceChangedTopic: "Price-Changed-Topic",
 		},
 	}

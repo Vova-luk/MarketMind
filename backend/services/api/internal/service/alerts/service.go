@@ -87,6 +87,9 @@ func (s *Service) Update(ctx context.Context, telegramUserID, subscriptionID, al
 	}
 	conditionChanged := targetChanged || next.Direction != current.Direction
 	if conditionChanged || enabling {
+		next.IsNotified = false
+	}
+	if conditionChanged || enabling {
 		if err := validateQuote(subscription); err != nil {
 			return Result{}, err
 		}
