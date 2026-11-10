@@ -183,9 +183,12 @@ paths:
       operationId: listSubscriptions
       summary: Получить список отслеживаемых рынков
       description: |
-        Все подписки текущего пользователя по subscription_id ASC, включая рынки
-        отключённых бирж (для них price: null). Без пагинации: размер ограничен лимитом.
+        Подписки текущего пользователя по subscription_id ASC, включая рынки
+        отключённых бирж (для них price: null).
         Каждая строка содержит subscription_id, base_asset, quote_asset, exchange_name и price.
+      parameters:
+      - {$ref: '#/components/parameters/ListPage'}
+      - {$ref: '#/components/parameters/ListPageSize'}
       responses:
         '200':
           description: Список подписок в порядке добавления. Если подписок нет, items будет пустым массивом.
@@ -199,6 +202,7 @@ paths:
                   price: '83781'
                   base_asset: BTC
                   quote_asset: USDT
+                next_page: null
         '401': {$ref: '#/components/responses/Unauthorized'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -358,12 +362,15 @@ paths:
       - Alerts
       x-implementation-status: implemented
       operationId: listSubscriptionAlerts
-      summary: Получить все алерты подписки
+      summary: Получить список алертов подписки
       description: |
         Все активные и отключённые алерты по alert_id ASC. В самостоятельном ответе
         каждый алерт содержит quote_asset. Нужен для обновления алертов без повторной загрузки карточки.
         Цель рассчитывается при чтении из сохранённого условия и reference_price.
-        Без пагинации. Текущая цена и доступность биржи не влияют на сохранённые условия.
+        Текущая цена и доступность биржи не влияют на сохранённые условия.
+      parameters:
+      - {$ref: '#/components/parameters/ListPage'}
+      - {$ref: '#/components/parameters/ListPageSize'}
       responses:
         '200':
           description: Список алертов; items пуст, если условия ещё не созданы.
@@ -399,10 +406,12 @@ paths:
                       target_price: '83000'
                       is_active: true
                       quote_asset: USDT
+                    next_page: null
                 empty:
                   summary: Алерты ещё не созданы
                   value:
                     items: []
+                    next_page: null
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -631,6 +640,16 @@ components:
       in: path
       required: true
       schema: {$ref: '#/components/schemas/Id'}
+    ListPage:
+      name: page
+      in: query
+      description: Номер страницы, начиная с 1.
+      schema: {type: integer, format: int32, minimum: 1, maximum: 2147483647, default: 1}
+    ListPageSize:
+      name: page_size
+      in: query
+      description: Количество элементов на странице.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 10}
   responses:
     BadRequest:
       description: VALIDATION_ERROR — неверный ID (включая переполнение BIGINT), query-параметр, JSON-тело или значение/вычисленный
@@ -880,10 +899,17 @@ components:
       type: object
       required:
       - items
+      - next_page
       properties:
         items:
           type: array
           items: {$ref: '#/components/schemas/Subscription'}
+        next_page: {$ref: '#/components/schemas/NextListPage'}
+    NextListPage:
+      type: [integer, 'null']
+      minimum: 1
+      maximum: 2147483647
+      description: Номер следующей страницы или null. За пределами списка items будет пустым массивом.
     SubscriptionDetail:
       allOf:
       - {$ref: '#/components/schemas/Subscription'}
@@ -1001,10 +1027,12 @@ components:
       type: object
       required:
       - items
+      - next_page
       properties:
         items:
           type: array
           items: {$ref: '#/components/schemas/Alert'}
+        next_page: {$ref: '#/components/schemas/NextListPage'}
     AssetCode:
       type: string
       minLength: 1

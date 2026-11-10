@@ -28,12 +28,13 @@ const subscriptionJoins = `
 	JOIN market_mind.exchanges AS e ON e.id = m.exchange_id
 `
 
-func (r *Repository) List(ctx context.Context, telegramUserID int64) ([]domainsubscriptions.Subscription, error) {
+func (r *Repository) List(ctx context.Context, telegramUserID int64, limit int, offset int64) ([]domainsubscriptions.Subscription, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+subscriptionColumns+subscriptionJoins+`
 		WHERE u.telegram_user_id = $1
 		ORDER BY s.id
-	`, telegramUserID)
+		LIMIT $2 OFFSET $3
+	`, telegramUserID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query user subscriptions: %w", err)
 	}
@@ -45,6 +46,15 @@ func (r *Repository) List(ctx context.Context, telegramUserID int64) ([]domainsu
 }
 
 func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
+	return r.getDetail(ctx, telegramUserID, subscriptionID, nil, 0)
+}
+
+func (r *Repository) ListAlerts(ctx context.Context, telegramUserID, subscriptionID int64, limit int, offset int64) ([]domainsubscriptions.Alert, string, error) {
+	detail, err := r.getDetail(ctx, telegramUserID, subscriptionID, &limit, offset)
+	return detail.Alerts, detail.QuoteAsset, err
+}
+
+func (r *Repository) getDetail(ctx context.Context, telegramUserID, subscriptionID int64, alertLimit *int, alertOffset int64) (domainsubscriptions.Detail, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+subscriptionColumns+`, m.updated_at,
 		       a.id, a.type, a.value::text, a.direction, a.reference_price::text,
@@ -54,10 +64,16 @@ func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int
 		       END)::text AS target_price,
 		       a.is_active
 		`+subscriptionJoins+`
-		LEFT JOIN market_mind.alerts AS a ON a.subscription_id = s.id
+		LEFT JOIN LATERAL (
+		    SELECT id, type, value, condition, reference_price, is_active
+		    FROM market_mind.alerts
+		    WHERE subscription_id = s.id
+		    ORDER BY id
+		    LIMIT $3 OFFSET $4
+		) AS a ON TRUE
 		WHERE u.telegram_user_id = $1 AND s.id = $2
 		ORDER BY a.id
-	`, telegramUserID, subscriptionID)
+	`, telegramUserID, subscriptionID, alertLimit, alertOffset)
 	if err != nil {
 		return domainsubscriptions.Detail{}, fmt.Errorf("query subscription detail: %w", err)
 	}

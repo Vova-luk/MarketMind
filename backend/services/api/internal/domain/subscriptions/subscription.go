@@ -33,7 +33,7 @@ type Alert struct {
 }
 
 type Repository interface {
-	List(ctx context.Context, telegramUserID int64) ([]Subscription, error)
+	List(ctx context.Context, telegramUserID int64, limit int, offset int64) ([]Subscription, error)
 	Get(ctx context.Context, telegramUserID, subscriptionID int64) (Detail, error)
 	Delete(ctx context.Context, telegramUserID, subscriptionID int64) error
 }

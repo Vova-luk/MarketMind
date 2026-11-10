@@ -22,7 +22,7 @@ type Handler struct {
 }
 
 type subscriptionReader interface {
-	Get(ctx context.Context, telegramUserID, subscriptionID int64) (subscriptions.Detail, error)
+	ListAlerts(ctx context.Context, telegramUserID, subscriptionID int64, limit int, offset int64) ([]subscriptions.Alert, string, error)
 }
 
 func NewHandler(service *service.Service, subscriptions subscriptionReader, logger *slog.Logger) *Handler {
@@ -34,9 +34,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	page, ok := requestparams.ParsePage(r.URL.RawQuery)
+	if !ok {
+		httpresponse.WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid pagination parameters")
+		return
+	}
 	ctx := r.Context()
 	telegramUserID, _ := requestctx.TelegramUserID(ctx)
-	detail, err := h.subscriptions.Get(ctx, telegramUserID, subscriptionID)
+	alerts, quoteAsset, err := h.subscriptions.ListAlerts(ctx, telegramUserID, subscriptionID, page.Size+1, page.Offset())
 	if errors.Is(err, subscriptions.ErrNotFound) {
 		httpresponse.WriteError(w, http.StatusNotFound, "SUBSCRIPTION_NOT_FOUND", "Subscription not found")
 		return
@@ -47,18 +52,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]alertResponse, 0, len(detail.Alerts))
-	for _, alert := range detail.Alerts {
+	count := min(len(alerts), page.Size)
+	items := make([]alertResponse, 0, count)
+	for _, alert := range alerts[:count] {
 		items = append(items, alertResponse{
 			ID: alert.ID, Type: alert.Type, Value: alert.Value,
 			Direction:      alert.Direction,
 			ReferencePrice: alert.ReferencePrice, TargetPrice: alert.TargetPrice,
-			IsActive: alert.IsActive, QuoteAsset: detail.QuoteAsset,
+			IsActive: alert.IsActive, QuoteAsset: quoteAsset,
 		})
 	}
 	httpresponse.WriteJSON(w, http.StatusOK, struct {
-		Items []alertResponse `json:"items"`
-	}{Items: items})
+		Items    []alertResponse `json:"items"`
+		NextPage *int            `json:"next_page"`
+	}{Items: items, NextPage: page.NextPage(len(alerts))})
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
