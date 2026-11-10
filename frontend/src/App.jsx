@@ -6,8 +6,10 @@ import SearchSheet from './components/SearchSheet';
 import CoinSheet from './components/CoinSheet';
 import { initTelegram, triggerHaptic } from './utils/telegram';
 import {
-  fetchInitialData,
-  toggleWatchlistApi,
+  initAppData,
+  addSubscriptionApi,
+  deleteSubscriptionApi,
+  getSubscriptionDetailApi,
   createAlertApi,
   toggleAlertApi,
   deleteAlertApi,
@@ -15,114 +17,145 @@ import {
 
 export default function App() {
   const [userName, setUserName] = useState('Пользователь');
-  const [coins, setCoins] = useState([]);
+  const [exchanges, setExchanges] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [syncError, setSyncError] = useState(false);
 
   const [activeSheet, setActiveSheet] = useState(null); 
-  const [selectedCoinId, setSelectedCoinId] = useState(null);
+  const [selectedDetail, setSelectedDetail] = useState(null);
 
-  const loadData = async () => {
+  const loadInitial = async () => {
     setIsLoading(true);
-    setSyncError(false);
-    const data = await fetchInitialData();
+    const data = await initAppData();
     if (data.user?.firstName) {
       setUserName(data.user.firstName);
     }
-    setCoins(data.coins || []);
+    setExchanges(data.exchanges);
+    setSubscriptions(data.subscriptions);
     setIsLoading(false);
   };
 
   useEffect(() => {
     initTelegram();
-    loadData();
+    loadInitial();
   }, []);
 
-  const watchedCoins = coins.filter((c) => c.isWatched);
-  const selectedCoin = coins.find((c) => c.id === selectedCoinId);
-
-  const handleOpenCoin = (id) => {
+  //карточка монеты
+  const handleOpenSubscription = async (subscriptionId) => {
     triggerHaptic('light');
-    setSelectedCoinId(id);
+    const baseSub = subscriptions.find(
+      (s) => s.subscription_id === subscriptionId
+    );
+    setSelectedDetail({ ...baseSub, alerts: baseSub?.alerts || [] });
     setActiveSheet('coin');
-  };
-
-  const handleOpenSearch = () => {
-    triggerHaptic('medium');
-    setActiveSheet('search');
-  };
-
-  const handleToggleWatch = async (coinId) => {
-    triggerHaptic('light');
-    const target = coins.find((c) => c.id === coinId);
-    if (!target) return;
-
-    setCoins((prev) =>
-      prev.map((c) => (c.id === coinId ? { ...c, isWatched: !c.isWatched } : c))
-    );
 
     try {
-      await toggleWatchlistApi(coinId, target.isWatched);
+      const detail = await getSubscriptionDetailApi(subscriptionId);
+      setSelectedDetail(detail);
     } catch (e) {
     }
   };
 
-  const handleAddAlert = async (coinId, targetPrice, diffLabel) => {
-    triggerHaptic('medium');
-    const tempAlert = {
-      id: Date.now(),
-      targetPrice,
-      diffLabel,
-      isActive: true,
-    };
+  //добавить-удалить подписку
+  const handleToggleSubscription = async (market, existingSub) => {
+    triggerHaptic('light');
 
-    setCoins((prev) =>
-      prev.map((c) =>
-        c.id === coinId ? { ...c, alerts: [...c.alerts, tempAlert] } : c
-      )
-    );
-
-    try {
-      await createAlertApi(coinId, targetPrice, diffLabel);
-    } catch (e) {
+    if (existingSub) {
+      //удалить
+      setSubscriptions((prev) =>
+        prev.filter((s) => s.subscription_id !== existingSub.subscription_id)
+      );
+      try {
+        await deleteSubscriptionApi(existingSub.subscription_id);
+      } catch (e) {}
+    } else {
+      // добавить
+      try {
+        const created = await addSubscriptionApi(market);
+        setSubscriptions((prev) => [...prev, created]);
+      } catch (e) {
+        const exchangeObj = exchanges.find((ex) => ex.id === market.exchange_id);
+        const mockSub = {
+          subscription_id: String(Date.now()),
+          exchange_name: exchangeObj?.name || 'Binance',
+          base_asset: market.base_asset,
+          quote_asset: market.quote_asset,
+          price: market.price,
+          alerts: [],
+        };
+        setSubscriptions((prev) => [...prev, mockSub]);
+      }
     }
   };
 
-  const handleToggleAlert = async (coinId, alertId) => {
-    triggerHaptic('light');
-    const targetCoin = coins.find((c) => c.id === coinId);
-    const targetAlert = targetCoin?.alerts.find((a) => a.id === alertId);
-
-    setCoins((prev) =>
-      prev.map((c) =>
-        c.id === coinId
-          ? {
-              ...c,
-              alerts: c.alerts.map((a) =>
-                a.id === alertId ? { ...a, isActive: !a.isActive } : a
-              ),
-            }
-          : c
-      )
-    );
+  //создание алерта
+  const handleAddAlert = async (alertPayload) => {
+    if (!selectedDetail) return;
+    triggerHaptic('medium');
+    const subId = selectedDetail.subscription_id;
 
     try {
-      await toggleAlertApi(alertId, !targetAlert?.isActive);
+      const createdAlert = await createAlertApi(subId, alertPayload);
+      setSelectedDetail((prev) => ({
+        ...prev,
+        alerts: [...(prev.alerts || []), createdAlert],
+      }));
+    } catch (e) {
+      const refPrice = Number(selectedDetail.price || 0);
+      const targetPrice =
+        alertPayload.type === 'price'
+          ? alertPayload.value
+          : String(
+              Math.round(refPrice * (1 + Number(alertPayload.value) / 100) * 100) / 100
+            );
+
+      const mockAlert = {
+        alert_id: String(Date.now()),
+        type: alertPayload.type,
+        value: alertPayload.value,
+        condition: alertPayload.condition,
+        reference_price: String(refPrice),
+        target_price: targetPrice,
+        is_active: true,
+      };
+      setSelectedDetail((prev) => ({
+        ...prev,
+        alerts: [...(prev.alerts || []), mockAlert],
+      }));
+    }
+  };
+
+  //уведомление о включении-выключении алерта
+  const handleToggleAlert = async (alertId, nextActive) => {
+    if (!selectedDetail) return;
+    triggerHaptic('light');
+    const subId = selectedDetail.subscription_id;
+
+    setSelectedDetail((prev) => ({
+      ...prev,
+      alerts: prev.alerts.map((a) =>
+        a.alert_id === alertId ? { ...a, is_active: nextActive } : a
+      ),
+    }));
+
+    try {
+      await toggleAlertApi(subId, alertId, nextActive);
     } catch (e) {}
   };
 
-  const handleDeleteAlert = async (coinId, alertId) => {
+  //удалениеалерта
+  const handleDeleteAlert = async (alertId) => {
+    if (!selectedDetail) return;
     triggerHaptic('medium');
-    setCoins((prev) =>
-      prev.map((c) =>
-        c.id === coinId
-          ? { ...c, alerts: c.alerts.filter((a) => a.id !== alertId) }
-          : c
-      )
-    );
+    const subId = selectedDetail.subscription_id;
+
+    setSelectedDetail((prev) => ({
+      ...prev,
+      alerts: prev.alerts.filter((a) => a.alert_id !== alertId),
+    }));
 
     try {
-      await deleteAlertApi(alertId);
+      await deleteAlertApi(subId, alertId);
     } catch (e) {}
   };
 
@@ -130,20 +163,6 @@ export default function App() {
     <div className="max-w-md mx-auto min-h-screen bg-white relative flex flex-col font-sans shadow-xl overflow-hidden">
       <Header userName={userName} />
 
-      {/*баннер ошибки синхронизации*/}
-      {syncError && (
-        <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs text-red-600">
-          <span>Ошибка синхронизации данных</span>
-          <button
-            onClick={loadData}
-            className="px-2.5 py-1 bg-red-600 text-white rounded-lg cursor-pointer"
-          >
-            Повторить
-          </button>
-        </div>
-      )}
-
-      {/* главный список + скелетоны при загрузке */}
       <main
         className={`flex-1 p-4 space-y-3 transition-all duration-200 ${
           activeSheet ? 'blur-xs pointer-events-none select-none opacity-60' : ''
@@ -156,28 +175,33 @@ export default function App() {
               className="h-16 bg-gray-100 animate-pulse rounded-2xl"
             />
           ))
-        ) : watchedCoins.length === 0 ? (
+        ) : subscriptions.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-sm">
-            Список отслеживания пуст. Нажмите «+», чтобы добавить монеты.
+            Список отслеживания пуст. Нажмите «+», чтобы добавить рынок.
           </div>
         ) : (
-          watchedCoins.map((coin) => (
-            <CoinCard key={coin.id} coin={coin} onClick={handleOpenCoin} />
+          subscriptions.map((sub) => (
+            <CoinCard
+              key={sub.subscription_id}
+              subscription={sub}
+              onClick={handleOpenSubscription}
+            />
           ))
         )}
       </main>
 
-      {/*кнопка + */}
       {!activeSheet && (
         <button
-          onClick={handleOpenSearch}
+          onClick={() => {
+            triggerHaptic('medium');
+            setActiveSheet('search');
+          }}
           className="fixed bottom-6 right-6 w-14 h-14 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-full shadow-lg flex items-center justify-center transition-transform z-20 cursor-pointer"
         >
           <Plus className="w-8 h-8 stroke-[2]" />
         </button>
       )}
 
-      {/*модальная шторка */}
       {activeSheet && (
         <div
           onClick={() => setActiveSheet(null)}
@@ -195,12 +219,16 @@ export default function App() {
             </button>
 
             {activeSheet === 'search' && (
-              <SearchSheet coins={coins} onToggleWatch={handleToggleWatch} />
+              <SearchSheet
+                exchanges={exchanges}
+                subscriptions={subscriptions}
+                onToggleSubscription={handleToggleSubscription}
+              />
             )}
 
-            {activeSheet === 'coin' && selectedCoin && (
+            {activeSheet === 'coin' && selectedDetail && (
               <CoinSheet
-                coin={selectedCoin}
+                detail={selectedDetail}
                 onAddAlert={handleAddAlert}
                 onToggleAlert={handleToggleAlert}
                 onDeleteAlert={handleDeleteAlert}

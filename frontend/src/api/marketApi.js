@@ -44,6 +44,14 @@ const FALLBACK_MARKETS = [
   },
   {
     exchange_id: 1,
+    external_id: 'BTWUSDT',
+    base_asset: 'BTW',
+    quote_asset: 'USDT',
+    display_name: 'BTW/USDT',
+    price: '1.92',
+  },
+  {
+    exchange_id: 2,
     external_id: 'ETHUSDT',
     base_asset: 'ETH',
     quote_asset: 'USDT',
@@ -51,12 +59,12 @@ const FALLBACK_MARKETS = [
     price: '2505',
   },
   {
-    exchange_id: 1,
-    external_id: 'BTWUSDT',
-    base_asset: 'BTW',
+    exchange_id: 3,
+    external_id: 'ZECUSDT',
+    base_asset: 'ZEC',
     quote_asset: 'USDT',
-    display_name: 'BTW/USDT',
-    price: '1.92',
+    display_name: 'ZEC/USDT',
+    price: '1252',
   },
 ];
 
@@ -101,8 +109,9 @@ export const searchMarketsApi = async (exchangeId, query = '', page = 1, limit =
     const q = query.trim().toLowerCase();
     const filtered = FALLBACK_MARKETS.filter(
       (m) =>
-        m.display_name.toLowerCase().includes(q) ||
-        m.base_asset.toLowerCase().includes(q)
+        m.exchange_id === exchangeId &&
+        (m.display_name.toLowerCase().includes(q) ||
+          m.base_asset.toLowerCase().includes(q))
     );
     return { items: filtered, next_page: null };
   }
@@ -141,7 +150,7 @@ export const createAlertApi = async (subscriptionId, { type, value, condition })
   const response = await apiClient.post(`/subscriptions/${subscriptionId}/alerts`, {
     type,
     value: cleanValue,
-    condition,
+    direction,
   });
   return response.data; 
 };

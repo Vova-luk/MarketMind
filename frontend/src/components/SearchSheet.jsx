@@ -1,24 +1,113 @@
-import { useState } from 'react';
-import { Search, Trash2, Bookmark } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Trash2, Bookmark, ChevronDown } from 'lucide-react';
+import { searchMarketsApi } from '../api/marketApi';
+import { triggerHaptic } from '../utils/telegram';
 
-export default function SearchSheet({ coins, onToggleWatch }) {
+export default function SearchSheet({
+  exchanges,
+  subscriptions,
+  onToggleSubscription,
+}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortAsc, setSortAsc] = useState(false);
-  const [selectedExchange, setSelectedExchange] = useState('Все');
 
-  const filteredCoins = coins
-    .filter((c) => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        c.name.toLowerCase().includes(q) || c.ticker.toLowerCase().includes(q);
-      const matchesExchange =
-        selectedExchange === 'Все' || c.exchange === selectedExchange;
-      return matchesSearch && matchesExchange;
-    })
-    .sort((a, b) => (sortAsc ? a.price - b.price : b.price - a.price));
+  const [selectedExchangeIds, setSelectedExchangeIds] = useState(() =>
+    exchanges.length > 0 ? [exchanges[0].id] : [1]
+  );
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [markets, setMarkets] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (exchanges.length > 0 && selectedExchangeIds.length === 0) {
+      setSelectedExchangeIds([exchanges[0].id]);
+    }
+  }, [exchanges, selectedExchangeIds.length]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (selectedExchangeIds.length === 0) return;
+
+    let active = true;
+    const loadMarkets = async () => {
+      setLoading(true);
+      try {
+        const responses = await Promise.all(
+          selectedExchangeIds.map((id) => searchMarketsApi(id, searchQuery))
+        );
+        if (active) {
+          const combined = responses.flatMap((res) => res.items || []);
+          setMarkets(combined);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (active) setLoading(false);
+      }
+    };
+
+    const timer = setTimeout(loadMarkets, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [selectedExchangeIds, searchQuery]);
+
+  const handleToggleExchange = (exchangeId) => {
+    triggerHaptic('light');
+    setSelectedExchangeIds((prev) => {
+      const isSelected = prev.includes(exchangeId);
+      if (isSelected) {
+        if (prev.length === 1) {
+          return prev;
+        }
+        return prev.filter((id) => id !== exchangeId);
+      } else {
+        return [...prev, exchangeId];
+      }
+    });
+  };
+
+  const getExchangeName = (exchangeId) => {
+    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
+  };
+
+  const getDropdownButtonLabel = () => {
+    if (selectedExchangeIds.length === 1) {
+      return getExchangeName(selectedExchangeIds[0]);
+    }
+    return `Биржи (${selectedExchangeIds.length})`;
+  };
+
+  const findExistingSubscription = (market) => {
+    const exName = getExchangeName(market.exchange_id);
+    return subscriptions.find(
+      (s) =>
+        s.base_asset === market.base_asset &&
+        s.quote_asset === market.quote_asset &&
+        s.exchange_name === exName
+    );
+  };
+
+  const sortedMarkets = [...markets].sort((a, b) => {
+    const pA = Number(a.price || 0);
+    const pB = Number(b.price || 0);
+    return sortAsc ? pA - pB : pB - pA;
+  });
 
   return (
     <div className="mt-6 space-y-4">
+      {/* поле поиска */}
       <div className="relative">
         <input
           type="text"
@@ -30,73 +119,140 @@ export default function SearchSheet({ coins, onToggleWatch }) {
         <Search className="w-5 h-5 text-gray-400 absolute right-3 top-3" />
       </div>
 
-      <div className="flex items-center justify-between text-xs">
+      {/* фильтра */}
+      <div className="flex items-center justify-between text-xs relative">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSortAsc(!sortAsc)}
-            className="px-3 py-1.5 bg-gray-200 rounded-lg font-medium text-gray-800 cursor-pointer"
+            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-gray-800 cursor-pointer transition-colors"
           >
             Цена {sortAsc ? '↑' : '↓'}
           </button>
-          <button
-            onClick={() =>
-              setSelectedExchange((prev) =>
-                prev === 'Все' ? 'Binance' : prev === 'Binance' ? 'Bybit' : 'Все'
-              )
-            }
-            className="px-3 py-1.5 bg-gray-200 rounded-lg font-medium text-gray-800 cursor-pointer"
-          >
-            {selectedExchange === 'Все' ? 'Биржа' : selectedExchange}
-          </button>
+
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsDropdownOpen((prev) => !prev)}
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-gray-800 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>{getDropdownButtonLabel()}</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                  isDropdownOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {isDropdownOpen && (
+              <div className="absolute left-0 mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 z-40">
+                <div className="px-3 py-1 text-[10px] text-gray-400 border-b border-gray-100">
+                  Выберите минимум 1 биржу
+                </div>
+                {exchanges.map((exchange) => {
+                  const isChecked = selectedExchangeIds.includes(exchange.id);
+                  const isLastSelected =
+                    isChecked && selectedExchangeIds.length === 1;
+
+                  return (
+                    <label
+                      key={exchange.id}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleToggleExchange(exchange.id);
+                      }}
+                      className={`flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer ${
+                        isLastSelected ? 'opacity-75' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          readOnly
+                          className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                        />
+                        <span className="text-gray-800">{exchange.name}</span>
+                      </div>
+                      {isLastSelected && (
+                        <span className="text-[10px] text-gray-400">обяз.</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* сброс фильтров */}
         <button
           onClick={() => {
             setSearchQuery('');
-            setSelectedExchange('Все');
             setSortAsc(false);
+            if (exchanges.length > 0) {
+              setSelectedExchangeIds([exchanges[0].id]);
+            }
+            setIsDropdownOpen(false);
           }}
-          className="p-1.5 bg-gray-200 rounded-lg text-gray-700 cursor-pointer"
+          className="p-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-700 cursor-pointer transition-colors"
           title="Сбросить фильтры"
         >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
+      {/* список монет */}
       <div className="space-y-3 pt-2">
-        {filteredCoins.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12 text-gray-400 text-sm">
+            Загрузка рынков...
+          </div>
+        ) : sortedMarkets.length === 0 ? (
           <div className="text-center py-16 text-gray-400 text-sm">
             Ничего не найдено
           </div>
         ) : (
-          filteredCoins.map((coin) => (
-            <div
-              key={coin.id}
-              className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
-            >
-              <span className="text-base text-black">
-                {coin.name} ({coin.ticker})
-              </span>
+          sortedMarkets.map((market) => {
+            const existingSub = findExistingSubscription(market);
+            const isWatched = Boolean(existingSub);
+            const priceLabel =
+              market.price !== null
+                ? `${Number(market.price).toLocaleString('ru-RU')} ${market.quote_asset}`
+                : 'Н/Д';
 
-              <div className="flex items-center gap-4">
-                <span className="text-base font-medium text-black">
-                  {coin.price.toLocaleString('ru-RU')}$
-                </span>
-                <button
-                  onClick={() => onToggleWatch(coin.id)}
-                  className="p-1 cursor-pointer"
-                >
-                  <Bookmark
-                    className={`w-6 h-6 ${
-                      coin.isWatched
-                        ? 'fill-orange-500 text-orange-500'
-                        : 'text-gray-700'
-                    }`}
-                  />
-                </button>
+            return (
+              <div
+                key={`${market.exchange_id}-${market.external_id}`}
+                className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
+              >
+                <div className="flex flex-col">
+                  <span className="text-base text-black">
+                    {market.display_name}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {getExchangeName(market.exchange_id)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <span className="text-base font-medium text-black">
+                    {priceLabel}
+                  </span>
+                  <button
+                    onClick={() => onToggleSubscription(market, existingSub)}
+                    className="p-1 cursor-pointer"
+                  >
+                    <Bookmark
+                      className={`w-6 h-6 ${
+                        isWatched
+                          ? 'fill-orange-500 text-orange-500'
+                          : 'text-gray-700'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
