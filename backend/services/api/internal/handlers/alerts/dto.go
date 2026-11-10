@@ -16,7 +16,7 @@ type alertResponse struct {
 	ID             int64  `json:"alert_id,string"`
 	Type           string `json:"type"`
 	Value          string `json:"value"`
-	Condition      string `json:"condition"`
+	Direction      string `json:"direction"`
 	ReferencePrice string `json:"reference_price"`
 	TargetPrice    string `json:"target_price"`
 	IsActive       bool   `json:"is_active"`
@@ -26,7 +26,7 @@ type alertResponse struct {
 func toResponse(result service.Result) alertResponse {
 	return alertResponse{
 		ID: result.ID, Type: result.Type, Value: result.Value,
-		Condition:      string(result.Direction),
+		Direction:      string(result.Direction),
 		ReferencePrice: result.ReferencePrice, TargetPrice: result.TargetPrice,
 		IsActive: result.IsActive, QuoteAsset: result.QuoteAsset,
 	}
@@ -73,7 +73,7 @@ func decodeChange(decoder *json.Decoder, allowActive bool) (service.Patch, bool)
 			if err := json.Unmarshal(raw, &value); err != nil || value == nil {
 				return service.Patch{}, false
 			}
-		case "condition":
+		case "direction":
 			if err := json.Unmarshal(raw, &direction); err != nil || direction == nil {
 				return service.Patch{}, false
 			}

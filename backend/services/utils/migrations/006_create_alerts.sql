@@ -6,7 +6,7 @@ CREATE TABLE market_mind.alerts (
     value NUMERIC NOT NULL,
     direction VARCHAR(3) NOT NULL,
     reference_price NUMERIC NOT NULL,
-    is_notified BOOLEAN NOT NULL DEFAULT FALSE 
+    is_notified BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 

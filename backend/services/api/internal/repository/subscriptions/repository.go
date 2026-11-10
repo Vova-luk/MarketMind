@@ -47,7 +47,7 @@ func (r *Repository) List(ctx context.Context, telegramUserID int64) ([]domainsu
 func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int64) (domainsubscriptions.Detail, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+subscriptionColumns+`, m.updated_at,
-		       a.id, a.type, a.value::text, a.condition, a.reference_price::text,
+		       a.id, a.type, a.value::text, a.direction, a.reference_price::text,
 		       (CASE a.type
 		           WHEN 'price' THEN a.value
 		           WHEN 'percent' THEN trim_scale(a.reference_price * (1 + a.value * 0.01))
@@ -67,11 +67,11 @@ func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int
 	found := false
 	for rows.Next() {
 		var alertID *int64
-		var alertType, value, condition, referencePrice, targetPrice *string
+		var alertType, value, direction, referencePrice, targetPrice *string
 		var isActive *bool
 		if err := rows.Scan(&detail.ID, &detail.BaseAsset, &detail.QuoteAsset,
 			&detail.ExchangeName, &detail.Price, &detail.UpdatedAt,
-			&alertID, &alertType, &value, &condition, &referencePrice, &targetPrice, &isActive); err != nil {
+			&alertID, &alertType, &value, &direction, &referencePrice, &targetPrice, &isActive); err != nil {
 			return domainsubscriptions.Detail{}, fmt.Errorf("scan subscription detail: %w", err)
 		}
 		found = true
@@ -83,7 +83,7 @@ func (r *Repository) Get(ctx context.Context, telegramUserID, subscriptionID int
 				ID:             *alertID,
 				Type:           *alertType,
 				Value:          *value,
-				Condition:      *condition,
+				Direction:      *direction,
 				ReferencePrice: *referencePrice,
 				TargetPrice:    *targetPrice,
 				IsActive:       *isActive,
