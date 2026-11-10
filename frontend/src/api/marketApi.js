@@ -136,7 +136,7 @@ export const getSubscriptionDetailApi = async (subscriptionId) => {
   return response.data; 
 };
 //новый алерт
-export const createAlertApi = async (subscriptionId, { type, value, condition }) => {
+export const createAlertApi = async (subscriptionId, { type, value, direction }) => {
   const cleanValue = String(value).replace(/^\+/, '').trim();
   const response = await apiClient.post(`/subscriptions/${subscriptionId}/alerts`, {
     type,
