@@ -13,13 +13,17 @@ import (
 	"marketmind/gen/go/exchangedata"
 )
 
+type MarketSearcher interface {
+	Search(ctx context.Context, exchangeName, query string, page, limit int32) (service.SearchPage, error)
+}
+
 type SearchHandler struct {
 	exchangedata.UnimplementedMarketSearchServiceServer
-	search *service.SearchService
+	search MarketSearcher
 	logger *slog.Logger
 }
 
-func NewSearchHandler(search *service.SearchService, logger *slog.Logger) *SearchHandler {
+func NewSearchHandler(search MarketSearcher, logger *slog.Logger) *SearchHandler {
 	return &SearchHandler{search: search, logger: logger}
 }
 

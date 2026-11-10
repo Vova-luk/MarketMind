@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"marketmind/api/internal/httpresponse"
-	"marketmind/api/internal/requestctx"
+	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/api/internal/utils/requestctx"
 )
 
 const (

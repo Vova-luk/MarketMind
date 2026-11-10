@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	domainusers "marketmind/api/internal/domain/users"
-	"marketmind/api/internal/httpresponse"
-	"marketmind/api/internal/requestctx"
+	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/api/internal/utils/requestctx"
 )
 
 type Handler struct {

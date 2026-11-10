@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	domain "marketmind/api/internal/domain/alerts"
-	"marketmind/api/internal/httpresponse"
 	service "marketmind/api/internal/service/alerts"
+	"marketmind/api/internal/utils/httpresponse"
 )
 
 type alertResponse struct {

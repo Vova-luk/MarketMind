@@ -9,14 +9,20 @@ import (
 
 	domain "marketmind/api/internal/domain/alerts"
 	"marketmind/api/internal/domain/subscriptions"
-	"marketmind/api/internal/httpresponse"
-	"marketmind/api/internal/requestctx"
-	"marketmind/api/internal/requestparams"
 	service "marketmind/api/internal/service/alerts"
+	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/api/internal/utils/requestctx"
+	"marketmind/api/internal/utils/requestparams"
 )
 
+type AlertWriter interface {
+	Create(ctx context.Context, telegramUserID, subscriptionID int64, condition domain.Condition) (service.Result, error)
+	Update(ctx context.Context, telegramUserID, subscriptionID, alertID int64, patch service.Patch) (service.Result, error)
+	Delete(ctx context.Context, telegramUserID, subscriptionID, alertID int64) error
+}
+
 type Handler struct {
-	service       *service.Service
+	service       AlertWriter
 	subscriptions subscriptionReader
 	logger        *slog.Logger
 }
@@ -25,7 +31,7 @@ type subscriptionReader interface {
 	ListAlerts(ctx context.Context, telegramUserID, subscriptionID int64, limit int, offset int64) ([]subscriptions.Alert, string, error)
 }
 
-func NewHandler(service *service.Service, subscriptions subscriptionReader, logger *slog.Logger) *Handler {
+func NewHandler(service AlertWriter, subscriptions subscriptionReader, logger *slog.Logger) *Handler {
 	return &Handler{service: service, subscriptions: subscriptions, logger: logger}
 }
 

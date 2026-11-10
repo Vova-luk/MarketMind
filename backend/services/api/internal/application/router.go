@@ -11,8 +11,8 @@ import (
 	"marketmind/api/internal/handlers/markets"
 	"marketmind/api/internal/handlers/subscriptions"
 	"marketmind/api/internal/handlers/users"
-	"marketmind/api/internal/httpresponse"
 	"marketmind/api/internal/middleware"
+	"marketmind/api/internal/utils/httpresponse"
 )
 
 func NewRouter(logger *slog.Logger, botToken string, userHandler *users.Handler, exchangeHandler *exchanges.Handler, subscriptionHandler *subscriptions.Handler, alertHandler *alerts.Handler, marketHandler *markets.Handler) *chi.Mux {
