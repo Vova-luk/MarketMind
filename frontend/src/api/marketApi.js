@@ -141,7 +141,7 @@ export const createAlertApi = async (subscriptionId, { type, value, condition })
   const response = await apiClient.post(`/subscriptions/${subscriptionId}/alerts`, {
     type,
     value: cleanValue,
-    condition,
+    direction,
   });
   return response.data; 
 };

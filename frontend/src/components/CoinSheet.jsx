@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ArrowUp, ArrowDown, Bell, BellOff, Trash2 } from 'lucide-react';
+import { Bell, BellOff, Trash2 } from 'lucide-react';
 
 export default function CoinSheet({
-  coin,
+  detail,
   onAddAlert,
   onToggleAlert,
   onDeleteAlert,
@@ -11,65 +11,85 @@ export default function CoinSheet({
   const [targetPercentInput, setTargetPercentInput] = useState('');
   const [inputError, setInputError] = useState('');
 
+  const currentPrice = Number(detail.price || 0);
+
   const handlePriceSubmit = () => {
-    const val = parseFloat(targetPriceInput);
-    if (isNaN(val) || val <= 0 || val > 500000) {
-      setInputError('Введите значение в диапазоне (0; 500 000]');
+    const raw = targetPriceInput.trim().replace(',', '.');
+    const val = Number(raw);
+
+    if (!raw || isNaN(val) || val <= 0 || val > 500000) {
+      setInputError('Цена должна быть в диапазоне (0; 500 000]');
       return;
     }
+    if (val === currentPrice) {
+      setInputError('Целевая цена не должна совпадать с текущей');
+      return;
+    }
+
     setInputError('');
-    const diffDollar = Math.round(val - coin.price);
-    const diffSign = diffDollar >= 0 ? '+' : '';
-    onAddAlert(coin.id, val, `${diffSign}${diffDollar}$`);
+    const direction = val > currentPrice ? 'gte' : 'lte';
+    onAddAlert({
+      type: 'price',
+      value: String(val),
+      direction,
+    });
     setTargetPriceInput('');
   };
 
   const handlePercentSubmit = () => {
-    const pct = parseFloat(targetPercentInput);
-    if (isNaN(pct) || pct === 0 || Math.abs(pct) > 1000) {
-      setInputError('Введите корректный процент');
+    const raw = targetPercentInput.trim().replace(',', '.').replace(/^\+/, '');
+    const pct = Number(raw);
+
+    if (!raw || isNaN(pct) || pct === 0 || pct <= -100 || pct > 500000) {
+      setInputError('Процент должен быть от -99.9 до 500 000 (кроме 0)');
       return;
     }
-    const calculatedTarget = Math.round(coin.price * (1 + pct / 100));
+
+    const calculatedTarget = currentPrice * (1 + pct / 100);
     if (calculatedTarget <= 0 || calculatedTarget > 500000) {
-      setInputError('Итоговая цена выходит за пределы (0; 500 000]');
+      setInputError('Итоговая цель выходит за диапазон (0; 500 000]');
       return;
     }
+
     setInputError('');
-    const sign = pct > 0 ? '+' : '';
-    onAddAlert(coin.id, calculatedTarget, `${sign}${pct}%`);
+    const direction = pct > 0 ? 'gte' : 'lte';
+    onAddAlert({
+      type: 'percent',
+      value: String(pct),
+      direction,
+    });
     setTargetPercentInput('');
+  };
+
+  const formatAlertBadge = (alert) => {
+    if (alert.type === 'percent') {
+      const sign = Number(alert.value) > 0 ? '+' : '';
+      return `${sign}${alert.value}%`;
+    }
+    const diff = Number(alert.target_price) - Number(alert.reference_price);
+    const sign = diff >= 0 ? '+' : '';
+    return `${sign}${Math.round(diff)} ${detail.quote_asset}`;
   };
 
   return (
     <div className="mt-4 space-y-5">
       <div>
-        <h2 className="text-3xl font-normal text-black">
-          {coin.name} ({coin.ticker})
-        </h2>
+        <div className="flex items-baseline justify-between pr-8">
+          <h2 className="text-3xl font-normal text-black">
+            {detail.base_asset}/{detail.quote_asset}
+          </h2>
+          <span className="text-xs text-gray-400">{detail.exchange_name}</span>
+        </div>
         <div className="flex items-center gap-3 mt-2">
           <span className="text-2xl font-normal text-black">
-            {coin.price.toLocaleString('ru-RU')}$
+            {detail.price !== null
+              ? `${Number(detail.price).toLocaleString('ru-RU')} ${detail.quote_asset}`
+              : 'Цена недоступна'}
           </span>
-          <div
-            className={`flex items-center text-xs italic leading-tight ${
-              coin.change24hDollar >= 0 ? 'text-green-600' : 'text-red-500'
-            }`}
-          >
-            {coin.change24hDollar >= 0 ? (
-              <ArrowUp className="w-4 h-4 mr-0.5" />
-            ) : (
-              <ArrowDown className="w-4 h-4 mr-0.5" />
-            )}
-            <div className="flex flex-col">
-              <span>{Math.abs(coin.change24hDollar)}$</span>
-              <span>{Math.abs(coin.change24hPercent)}%</span>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Добавление алерта */}
+      {/*добавление алерта*/}
       <div>
         <h3 className="text-xl font-normal text-black mb-3">Добавить алерт</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -81,6 +101,7 @@ export default function CoinSheet({
               type="number"
               value={targetPriceInput}
               onChange={(e) => setTargetPriceInput(e.target.value)}
+              placeholder="85000"
               className={`w-full px-2 py-1 text-sm border rounded-md mb-2 focus:outline-none ${
                 inputError ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -101,6 +122,7 @@ export default function CoinSheet({
               type="number"
               value={targetPercentInput}
               onChange={(e) => setTargetPercentInput(e.target.value)}
+              placeholder="5 или -5"
               className={`w-full px-2 py-1 text-sm border rounded-md mb-2 focus:outline-none ${
                 inputError ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -118,38 +140,40 @@ export default function CoinSheet({
         )}
       </div>
 
-      {/* Список активных алертов */}
+      {/*алерты*/}
       <div>
         <h3 className="text-xl font-normal text-black mb-3">Активные алерты</h3>
-        {coin.alerts.length === 0 ? (
+        {!detail.alerts || detail.alerts.length === 0 ? (
           <p className="text-center text-gray-500 text-sm py-6">
             У Вас нет активных алертов
           </p>
         ) : (
           <div className="space-y-3">
-            {coin.alerts.map((alert) => (
+            {detail.alerts.map((alert) => (
               <div
-                key={alert.id}
+                key={alert.alert_id}
                 className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
               >
                 <span className="text-sm font-normal text-black">
-                  Цель: {alert.targetPrice.toLocaleString('ru-RU')}$ (
-                  {alert.diffLabel})
+                  Цель: {Number(alert.target_price).toLocaleString('ru-RU')}{' '}
+                  {detail.quote_asset} ({formatAlertBadge(alert)})
                 </span>
 
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => onToggleAlert(coin.id, alert.id)}
+                    onClick={() =>
+                      onToggleAlert(alert.alert_id, !alert.is_active)
+                    }
                     className="w-12 h-7 bg-gray-200 rounded-full p-0.5 flex items-center transition-all cursor-pointer"
                   >
                     <div
                       className={`w-6 h-6 rounded-full flex items-center justify-center text-white transition-transform ${
-                        alert.isActive
+                        alert.is_active
                           ? 'bg-blue-500 translate-x-0'
                           : 'bg-red-500 translate-x-5'
                       }`}
                     >
-                      {alert.isActive ? (
+                      {alert.is_active ? (
                         <Bell className="w-3.5 h-3.5" />
                       ) : (
                         <BellOff className="w-3.5 h-3.5" />
@@ -158,7 +182,7 @@ export default function CoinSheet({
                   </button>
 
                   <button
-                    onClick={() => onDeleteAlert(coin.id, alert.id)}
+                    onClick={() => onDeleteAlert(alert.alert_id)}
                     className="p-1 text-gray-700 hover:text-red-500 cursor-pointer"
                   >
                     <Trash2 className="w-5 h-5" />
