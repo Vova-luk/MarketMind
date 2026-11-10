@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Search, Trash2, Bookmark } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Trash2, Bookmark, ChevronDown } from 'lucide-react';
 import { searchMarketsApi } from '../api/marketApi';
+import { triggerHaptic } from '../utils/telegram';
 
 export default function SearchSheet({
   exchanges,
@@ -9,45 +10,92 @@ export default function SearchSheet({
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortAsc, setSortAsc] = useState(false);
-  const [selectedExchangeId, setSelectedExchangeId] = useState(
-    exchanges[0]?.id || 1
+
+  const [selectedExchangeIds, setSelectedExchangeIds] = useState(() =>
+    exchanges.length > 0 ? [exchanges[0].id] : [1]
   );
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const currentExchange = exchanges.find((e) => e.id === selectedExchangeId);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
+    if (exchanges.length > 0 && selectedExchangeIds.length === 0) {
+      setSelectedExchangeIds([exchanges[0].id]);
+    }
+  }, [exchanges, selectedExchangeIds.length]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (selectedExchangeIds.length === 0) return;
+
     let active = true;
     const loadMarkets = async () => {
       setLoading(true);
-      const data = await searchMarketsApi(selectedExchangeId, searchQuery);
-      if (active) {
-        setMarkets(data.items || []);
-        setLoading(false);
+      try {
+        const responses = await Promise.all(
+          selectedExchangeIds.map((id) => searchMarketsApi(id, searchQuery))
+        );
+        if (active) {
+          const combined = responses.flatMap((res) => res.items || []);
+          setMarkets(combined);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (active) setLoading(false);
       }
     };
+
     const timer = setTimeout(loadMarkets, 250);
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [selectedExchangeId, searchQuery]);
+  }, [selectedExchangeIds, searchQuery]);
 
-  const cycleExchange = () => {
-    if (exchanges.length === 0) return;
-    const idx = exchanges.findIndex((e) => e.id === selectedExchangeId);
-    const next = exchanges[(idx + 1) % exchanges.length];
-    setSelectedExchangeId(next.id);
+  const handleToggleExchange = (exchangeId) => {
+    triggerHaptic('light');
+    setSelectedExchangeIds((prev) => {
+      const isSelected = prev.includes(exchangeId);
+      if (isSelected) {
+        if (prev.length === 1) {
+          return prev;
+        }
+        return prev.filter((id) => id !== exchangeId);
+      } else {
+        return [...prev, exchangeId];
+      }
+    });
   };
 
-  
+  const getExchangeName = (exchangeId) => {
+    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
+  };
+
+  const getDropdownButtonLabel = () => {
+    if (selectedExchangeIds.length === 1) {
+      return getExchangeName(selectedExchangeIds[0]);
+    }
+    return `Биржи (${selectedExchangeIds.length})`;
+  };
+
   const findExistingSubscription = (market) => {
+    const exName = getExchangeName(market.exchange_id);
     return subscriptions.find(
       (s) =>
         s.base_asset === market.base_asset &&
         s.quote_asset === market.quote_asset &&
-        s.exchange_name === currentExchange?.name
+        s.exchange_name === exName
     );
   };
 
@@ -59,45 +107,100 @@ export default function SearchSheet({
 
   return (
     <div className="mt-6 space-y-4">
+      {/* поле поиска */}
       <div className="relative">
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Поиск (например, BTC)..."
+          placeholder="Поиск..."
           className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-300 text-base focus:outline-none focus:border-blue-500"
         />
         <Search className="w-5 h-5 text-gray-400 absolute right-3 top-3" />
       </div>
 
-      <div className="flex items-center justify-between text-xs">
+      {/* фильтра */}
+      <div className="flex items-center justify-between text-xs relative">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSortAsc(!sortAsc)}
-            className="px-3 py-1.5 bg-gray-200 rounded-lg font-medium text-gray-800 cursor-pointer"
+            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-gray-800 cursor-pointer transition-colors"
           >
             Цена {sortAsc ? '↑' : '↓'}
           </button>
-          <button
-            onClick={cycleExchange}
-            className="px-3 py-1.5 bg-gray-200 rounded-lg font-medium text-gray-800 cursor-pointer"
-          >
-            {currentExchange ? currentExchange.name : 'Биржа'}
-          </button>
+
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setIsDropdownOpen((prev) => !prev)}
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-gray-800 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>{getDropdownButtonLabel()}</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                  isDropdownOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {isDropdownOpen && (
+              <div className="absolute left-0 mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 z-40">
+                <div className="px-3 py-1 text-[10px] text-gray-400 border-b border-gray-100">
+                  Выберите минимум 1 биржу
+                </div>
+                {exchanges.map((exchange) => {
+                  const isChecked = selectedExchangeIds.includes(exchange.id);
+                  const isLastSelected =
+                    isChecked && selectedExchangeIds.length === 1;
+
+                  return (
+                    <label
+                      key={exchange.id}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleToggleExchange(exchange.id);
+                      }}
+                      className={`flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer ${
+                        isLastSelected ? 'opacity-75' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          readOnly
+                          className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                        />
+                        <span className="text-gray-800">{exchange.name}</span>
+                      </div>
+                      {isLastSelected && (
+                        <span className="text-[10px] text-gray-400">обяз.</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* сброс фильтров */}
         <button
           onClick={() => {
             setSearchQuery('');
             setSortAsc(false);
+            if (exchanges.length > 0) {
+              setSelectedExchangeIds([exchanges[0].id]);
+            }
+            setIsDropdownOpen(false);
           }}
-          className="p-1.5 bg-gray-200 rounded-lg text-gray-700 cursor-pointer"
+          className="p-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-700 cursor-pointer transition-colors"
           title="Сбросить фильтры"
         >
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
+      {/* список монет */}
       <div className="space-y-3 pt-2">
         {loading ? (
           <div className="text-center py-12 text-gray-400 text-sm">
@@ -121,9 +224,14 @@ export default function SearchSheet({
                 key={`${market.exchange_id}-${market.external_id}`}
                 className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
               >
-                <span className="text-base text-black">
-                  {market.display_name}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-base text-black">
+                    {market.display_name}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {getExchangeName(market.exchange_id)}
+                  </span>
+                </div>
 
                 <div className="flex items-center gap-4">
                   <span className="text-base font-medium text-black">
