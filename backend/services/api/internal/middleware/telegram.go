@@ -22,6 +22,16 @@ const (
 	maxClockSkew   = time.Minute
 )
 
+func AuthenticateTelegramDev(userID int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := requestctx.WithTelegramUserID(r.Context(), userID)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 func AuthenticateTelegram(botToken string) func(http.Handler) http.Handler {
 	var secret []byte
 	if botToken != "" {

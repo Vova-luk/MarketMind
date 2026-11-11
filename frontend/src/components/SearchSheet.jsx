@@ -88,7 +88,6 @@ export default function SearchSheet({
     setIsDropdownOpen(false);
   };
 
-
   const findExistingSubscription = (market) => {
     const exName = getExchangeName(market.exchange_id);
     return subscriptions.find(

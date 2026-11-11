@@ -4,12 +4,37 @@ include:
   - compose.postgres.yaml
   - compose.kafka.yaml
 
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
+  kafka-init:
+    image: apache/kafka:latest
+    logging: *logging
+    depends_on:
+      - broker-1
+      - broker-2
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for attempt in 1 2 3 4 5; do
+          if /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker-1:19092,broker-2:19092 \
+            --create --if-not-exists --topic Price-Checked-Topic --partitions 3 --replication-factor 2; then
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+
   api:
     build:
       context: ..
       dockerfile: services/api/Dockerfile
     restart: unless-stopped
+    logging: *logging
     env_file:
       - ../.env
     environment:
@@ -38,7 +63,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
-      interval: 10s
+      interval: 5m
       timeout: 3s
       retries: 3
       start_period: 10s
@@ -49,6 +74,7 @@ services:
       context: ..
       dockerfile: services/exchange-data/Dockerfile
     restart: unless-stopped
+    logging: *logging
     environment:
       EXCHANGE_DATA_GRPC_HOST: 0.0.0.0
       EXCHANGE_DATA_API_ADDRESS: api:50051
@@ -67,6 +93,7 @@ services:
       context: ..
       dockerfile: services/tracking/Dockerfile
     restart: unless-stopped
+    logging: *logging
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -78,20 +105,22 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8182/health"]
-      interval: 10s
+      interval: 5m
       timeout: 3s
       retries: 3
       start_period: 10s
     stop_grace_period: 15s
 
   bot:
-    profiles: [notifications]
     build:
       context: ..
       dockerfile: services/bot/Dockerfile
     restart: unless-stopped
+    logging: *logging
     environment:
       BOT_TOKEN: ${BOT_TOKEN:-}
       BOT_KAFKA_BROKERS: broker-1:19092,broker-2:19092
@@ -101,7 +130,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8183/health"]
-      interval: 10s
+      interval: 5m
       timeout: 3s
       retries: 3
       start_period: 10s
