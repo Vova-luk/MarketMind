@@ -14,12 +14,10 @@ import (
 )
 
 const (
-	heartbeatInterval = 10 * time.Second
-	addressLogKey     = "addr"
-	serverRunning     = "server is running"
-	serverAlive       = "server is alive"
-	serverStopping    = "shutting down server"
-	serverStopped     = "server exited cleanly"
+	addressLogKey  = "addr"
+	serverRunning  = "server is running"
+	serverStopping = "shutting down server"
+	serverStopped  = "server exited cleanly"
 )
 
 type Server struct {
@@ -67,20 +65,14 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	s.logger.InfoContext(ctx, serverRunning, slog.String(addressLogKey, addr))
 
-	ticker := time.NewTicker(heartbeatInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			s.logger.InfoContext(ctx, serverAlive, slog.String(addressLogKey, addr))
-		case <-ctx.Done():
-			return s.shutdown(errChan)
-		case err := <-errChan:
-			if err != nil {
-				return fmt.Errorf("serve HTTP: %w", err)
-			}
-			return nil
+	select {
+	case <-ctx.Done():
+		return s.shutdown(errChan)
+	case err := <-errChan:
+		if err != nil {
+			return fmt.Errorf("serve HTTP: %w", err)
 		}
+		return nil
 	}
 }
 

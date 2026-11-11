@@ -37,7 +37,7 @@ go test -race ./exchange-data/...
 - `cmd/exchange-data` — точка входа, конфиг, slog и обработка сигналов.
 - `internal/app` — сборка компонентов и запуск приложения.
 - `internal/config` — структуры настроек, YAML, окружение и валидация.
-- `internal/server` — HTTP-сервер состояния, heartbeat и остановка.
+- `internal/server` — HTTP-сервер с проверкой состояния и корректной остановкой.
 - `internal/domain` — место для общих моделей рынков и котировок.
 - `internal/service` — место для сценариев приложения и интерфейсов зависимостей.
 - `internal/adapters/inbound/grpc` — место для gRPC-запросов от API-Service.
