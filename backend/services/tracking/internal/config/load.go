@@ -9,6 +9,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"go.yaml.in/yaml/v3"
+
+	"marketmind/contracts/events"
 )
 
 // Load reads YAML and applies environment overrides. Optional envPaths are
@@ -35,8 +37,8 @@ func Load(path string, envPaths ...string) (*Config, error) {
 			ConnectTimeout: 5 * time.Second,
 		},
 		Kafka: KafkaConfig{
-			Brokers: []string{"localhost:9092"}, GroupID: "marketmind-tracking",
-			PriceCheckedTopic: "Price-Checked-Topic", PriceChangedTopic: "Price-Changed-Topic",
+			Brokers: []string{"localhost:29092", "localhost:39092"}, GroupID: "marketmind-tracking",
+			PriceCheckedTopic: events.PricesCheckedTopic, PriceChangedTopic: events.PriceChangedTopic,
 		},
 	}
 	decoder := yaml.NewDecoder(file)

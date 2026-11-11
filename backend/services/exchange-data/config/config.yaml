@@ -1,0 +1,40 @@
+server:
+  host: "0.0.0.0"
+  port: 8184
+  read_timeout: 5s
+  write_timeout: 10s
+  shutdown_timeout: 10s
+
+grpc:
+  host: "127.0.0.1"
+  port: 9090
+  shutdown_timeout: 10s
+
+api:
+  address: "127.0.0.1:50051"
+  request_timeout: 5s
+
+kafka:
+  brokers: "localhost:29092,localhost:39092"
+  price_checked_topic: Price-Checked-Topic
+
+scheduler:
+  interval: 10s
+  exchanges: [binance, bybit, okx]
+
+exchanges:
+  binance:
+    base_url: https://data-api.binance.vision
+    retry_delay: 3s
+    request_timeout: 10s
+    max_attempts: 3
+  bybit:
+    base_url: https://api.bybit.com
+    request_timeout: 5s
+    retry_delay: 3s
+    max_attempts: 3
+  okx:
+    base_url: https://www.okx.com
+    request_timeout: 5s
+    retry_delay: 3s
+    max_attempts: 3

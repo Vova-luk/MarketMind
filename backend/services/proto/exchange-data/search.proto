@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package marketmind.exchangedata.v1;
+
+option go_package = "marketmind/gen/go/exchangedata;exchangedata";
+
+service MarketSearchService {
+  rpc SearchMarkets(SearchMarketsRequest) returns (SearchMarketsResponse);
+}
+
+message SearchMarketsRequest {
+  string exchange_name = 1;
+  // Case-insensitive substring of the external ID or the BASE/QUOTE label.
+  // An empty query matches the entire spot catalog.
+  string query = 2;
+  optional int32 page = 3; // Starts at 1. Defaults to 1.
+  optional int32 limit = 4; // Between 1 and 100. Defaults to 20.
+}
+
+message SearchMarketsResponse {
+  // Sorted lexicographically by external_id before pagination.
+  repeated Market items = 1;
+  optional int32 next_page = 2;
+}
+
+message Market {
+  string external_id = 1;
+  string base_asset = 2;
+  string quote_asset = 3;
+  optional string price = 4; // Last trade price as a decimal in quote_asset.
+}

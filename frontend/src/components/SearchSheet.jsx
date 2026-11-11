@@ -61,7 +61,26 @@ export default function SearchSheet({
       active = false;
       clearTimeout(timer);
     };
-  }, [selectedExchangeId, searchQuery]);
+  }, [selectedExchangeIds, searchQuery]);
+
+  const handleToggleExchange = (exchangeId) => {
+    triggerHaptic('light');
+    setSelectedExchangeIds((prev) => {
+      const isSelected = prev.includes(exchangeId);
+      if (isSelected) {
+        if (prev.length === 1) {
+          return prev;
+        }
+        return prev.filter((id) => id !== exchangeId);
+      } else {
+        return [...prev, exchangeId];
+      }
+    });
+  };
+
+  const getExchangeName = (exchangeId) => {
+    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
+  };
 
   const handleSelectExchange = (exchangeId) => {
     triggerHaptic('light');
