@@ -6,6 +6,7 @@ import (
 
 	"marketmind/api/pkg/alerts"
 	"marketmind/contracts/events"
+	"marketmind/utils/priceformat"
 )
 
 const (
@@ -52,7 +53,7 @@ func notificationText(item events.PriceNotification) (string, error) {
 	var condition string
 	switch item.Type {
 	case alerts.Price:
-		condition = fmt.Sprintf(priceConditionTemplate, operator, item.Value, item.QuoteAsset)
+		condition = fmt.Sprintf(priceConditionTemplate, operator, priceformat.TwoDecimals(item.Value), item.QuoteAsset)
 	case alerts.Percent:
 		value := item.Value
 		if !strings.HasPrefix(value, negativeSign) && !strings.HasPrefix(value, positiveSign) {
@@ -67,5 +68,6 @@ func notificationText(item events.PriceNotification) (string, error) {
 	if item.ExchangeName != "" {
 		market = fmt.Sprintf(marketWithExchangeTemplate, market, item.ExchangeName)
 	}
-	return fmt.Sprintf(notificationTemplate, market, item.ReferencePrice, item.QuoteAsset, item.CurrentPrice, item.QuoteAsset, condition), nil
+	return fmt.Sprintf(notificationTemplate, market, priceformat.TwoDecimals(item.ReferencePrice), item.QuoteAsset,
+		priceformat.TwoDecimals(item.CurrentPrice), item.QuoteAsset, condition), nil
 }

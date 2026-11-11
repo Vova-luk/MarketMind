@@ -11,6 +11,7 @@ import (
 	service "marketmind/api/internal/service/alerts"
 	"marketmind/api/internal/utils/httpresponse"
 	"marketmind/api/pkg/alerts"
+	"marketmind/utils/priceformat"
 )
 
 type alertResponse struct {
@@ -28,8 +29,9 @@ func toResponse(result service.Result) alertResponse {
 	return alertResponse{
 		ID: result.ID, Type: result.Type, Value: result.Value,
 		Direction:      result.Direction,
-		ReferencePrice: result.ReferencePrice, TargetPrice: result.TargetPrice,
-		IsActive: result.IsActive, QuoteAsset: result.QuoteAsset,
+		ReferencePrice: priceformat.TwoDecimals(result.ReferencePrice),
+		TargetPrice:    priceformat.TwoDecimals(result.TargetPrice),
+		IsActive:       result.IsActive, QuoteAsset: result.QuoteAsset,
 	}
 }
 

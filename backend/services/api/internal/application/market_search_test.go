@@ -46,7 +46,7 @@ func TestMarketSearchRoute(t *testing.T) {
 		}
 		switch {
 		case req.Query == "btc" && req.GetPage() == 1 && req.GetLimit() == 1:
-			price, nextPage := "77000", int32(2)
+			price, nextPage := "77000.126", int32(2)
 			return &exchangedatapb.SearchMarketsResponse{NextPage: &nextPage, Items: []*exchangedatapb.Market{
 				{ExternalId: "BTC-EUR", BaseAsset: "BTC", QuoteAsset: "EUR", Price: &price},
 			}}, nil
@@ -73,9 +73,9 @@ func TestMarketSearchRoute(t *testing.T) {
 		body  string
 	}{
 		{"exchange_id=7&q=+btc+&limit=1", http.StatusOK,
-			`{"items":[{"exchange_id":7,"external_id":"BTC-EUR","base_asset":"BTC","quote_asset":"EUR","display_name":"BTC/EUR","price":"77000"}],"next_page":2}`},
+			`{"items":[{"exchange_id":7,"external_id":"BTC-EUR","base_asset":"BTC","quote_asset":"EUR","display_name":"BTC/EUR","price":"77000.13","price_exact":"77000.126"}],"next_page":2}`},
 		{"exchange_id=7&q=btc&limit=1&page=2", http.StatusOK,
-			`{"items":[{"exchange_id":7,"external_id":"BTC-USDT","base_asset":"BTC","quote_asset":"USDT","display_name":"BTC/USDT","price":null}],"next_page":null}`},
+			`{"items":[{"exchange_id":7,"external_id":"BTC-USDT","base_asset":"BTC","quote_asset":"USDT","display_name":"BTC/USDT","price":null,"price_exact":null}],"next_page":null}`},
 		{"exchange_id=7&page=2147483647", http.StatusOK, `{"items":[],"next_page":null}`},
 		{"exchange_id=7&q=unknown", http.StatusOK, `{"items":[],"next_page":null}`},
 		{"exchange_id=7&q=offline", http.StatusServiceUnavailable,

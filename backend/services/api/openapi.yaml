@@ -162,13 +162,15 @@ paths:
                   base_asset: BTC
                   quote_asset: EUR
                   display_name: BTC/EUR
-                  price: '77000'
+                  price: '77000.00'
+                  price_exact: '77000'
                 - exchange_id: 1
                   external_id: BTCUSDT
                   base_asset: BTC
                   quote_asset: USDT
                   display_name: BTC/USDT
                   price: '83781.50'
+                  price_exact: '83781.50'
                 next_page: null
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -199,7 +201,7 @@ paths:
                 items:
                 - subscription_id: '18'
                   exchange_name: Binance
-                  price: '83781'
+                  price: '83781.00'
                   base_asset: BTC
                   quote_asset: USDT
                 next_page: null
@@ -220,7 +222,8 @@ paths:
         даже при отключённой бирже, исчерпанном лимите или недоступном каталоге/котировке.
         Новая подписка требует активной биржи и места в лимите.
 
-        Для нового рынка UI передаёт base_asset, quote_asset и price из результата поиска.
+        Для нового рынка UI передаёт base_asset, quote_asset и точную цену из price_exact результата поиска.
+        Точную цену можно отправить в поле price или передать price_exact вместе с объектом поиска.
         API проверяет формат полей и использует цену как начальную. Поле display_name
         можно передать вместе с объектом поиска, при сохранении оно игнорируется.
         Имя биржи берётся из БД. POST сохраняет данные без обращения к Exchange-Data.
@@ -259,7 +262,7 @@ paths:
               example:
                 subscription_id: '18'
                 exchange_name: Binance
-                price: '83781'
+                price: '83781.00'
                 base_asset: BTC
                 quote_asset: USDT
         '201':
@@ -277,7 +280,7 @@ paths:
               example:
                 subscription_id: '18'
                 exchange_name: Binance
-                price: '83781'
+                price: '83781.00'
                 base_asset: BTC
                 quote_asset: USDT
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -305,29 +308,29 @@ paths:
               example:
                 subscription_id: '18'
                 exchange_name: Binance
-                price: '83781'
+                price: '83781.00'
                 updated_at: '2026-11-09T08:30:00Z'
                 alerts:
                 - alert_id: '9'
                   type: percent
                   value: '5'
                   direction: gte
-                  reference_price: '83781'
+                  reference_price: '83781.00'
                   target_price: '87970.05'
                   is_active: true
                 - alert_id: '10'
                   type: percent
                   value: '-5'
                   direction: lte
-                  reference_price: '83781'
+                  reference_price: '83781.00'
                   target_price: '79591.95'
                   is_active: false
                 - alert_id: '11'
                   type: price
                   value: '83000'
                   direction: lte
-                  reference_price: '83781'
-                  target_price: '83000'
+                  reference_price: '83781.00'
+                  target_price: '83000.00'
                   is_active: true
                 base_asset: BTC
                 quote_asset: USDT
@@ -386,7 +389,7 @@ paths:
                       type: percent
                       value: '5'
                       direction: gte
-                      reference_price: '83781'
+                      reference_price: '83781.00'
                       target_price: '87970.05'
                       is_active: true
                       quote_asset: USDT
@@ -394,7 +397,7 @@ paths:
                       type: percent
                       value: '-5'
                       direction: lte
-                      reference_price: '83781'
+                      reference_price: '83781.00'
                       target_price: '79591.95'
                       is_active: false
                       quote_asset: USDT
@@ -402,8 +405,8 @@ paths:
                       type: price
                       value: '83000'
                       direction: lte
-                      reference_price: '83781'
-                      target_price: '83000'
+                      reference_price: '83781.00'
+                      target_price: '83000.00'
                       is_active: true
                       quote_asset: USDT
                     next_page: null
@@ -472,7 +475,7 @@ paths:
                 type: percent
                 value: '5'
                 direction: gte
-                reference_price: '83781'
+                reference_price: '83781.00'
                 target_price: '87970.05'
                 is_active: true
                 quote_asset: USDT
@@ -530,7 +533,7 @@ paths:
                 type: percent
                 value: '5'
                 direction: gte
-                reference_price: '83781'
+                reference_price: '83781.00'
                 target_price: '87970.05'
                 is_active: false
                 quote_asset: USDT
@@ -817,8 +820,13 @@ components:
           - BTC/USDT
           - BTC/EUR
         price:
+          oneOf:
+          - {$ref: '#/components/schemas/DisplayPrice'}
+          - {type: 'null'}
+          description: Цена на момент поиска в quote_asset, округлённая для отображения.
+        price_exact:
           $ref: '#/components/schemas/MarketSearchPrice'
-          description: Цена на момент поиска в quote_asset. При недоступности котировки — null.
+          description: Исходная цена для создания подписки.
     ExternalInstrumentId:
       type: string
       minLength: 1
@@ -849,7 +857,14 @@ components:
           type: string
           description: Подпись из поиска. При сохранении игнорируется.
         price: {$ref: '#/components/schemas/MarketSearchPrice'}
-      description: Для первой записи рынка нужны base_asset, quote_asset и положительная price.
+        price_exact:
+          $ref: '#/components/schemas/MarketSearchPrice'
+          description: Точная цена из поиска. Если задана, используется вместо price.
+      description: Для первой записи рынка нужны base_asset, quote_asset и положительная исходная цена.
+    DisplayPrice:
+      type: string
+      pattern: '^[0-9]+\.[0-9]{2}$'
+      examples: ['83781.50', '0.00']
     MarketSearchPrice:
       oneOf:
       - $ref: '#/components/schemas/PositiveDecimal'
@@ -892,9 +907,14 @@ components:
           - Binance
         price:
           oneOf:
+          - {$ref: '#/components/schemas/DisplayPrice'}
+          - {type: 'null'}
+          description: Последняя цена в quote_asset, округлённая для отображения. Для отключённой биржи — null.
+        price_exact:
+          oneOf:
           - {$ref: '#/components/schemas/PositiveDecimal'}
           - {type: 'null'}
-          description: Последняя сохранённая цена в quote_asset за единицу base_asset. Для отключённой биржи — null.
+          description: Исходная сохранённая цена для расчётов.
     SubscriptionList:
       type: object
       required:
@@ -1001,11 +1021,11 @@ components:
         value: {$ref: '#/components/schemas/Decimal'}
         direction: {$ref: '#/components/schemas/AlertDirection'}
         reference_price:
-          $ref: '#/components/schemas/PositiveDecimal'
-          description: Цена пары в момент создания алерта или изменения его условия.
+          $ref: '#/components/schemas/DisplayPrice'
+          description: Цена пары в момент настройки алерта, округлённая для отображения.
         target_price:
-          $ref: '#/components/schemas/PriceValue'
-          description: Целевая цена в валюте котировки подписки, вычисленная сервером.
+          $ref: '#/components/schemas/DisplayPrice'
+          description: Вычисленная сервером целевая цена, округлённая для отображения.
         is_active: {type: boolean}
       allOf:
       - {$ref: '#/components/schemas/AlertValueRules'}

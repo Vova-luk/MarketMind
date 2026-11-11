@@ -128,7 +128,7 @@ export const addSubscriptionApi = async (marketOption) => {
     base_asset: marketOption.base_asset,
     quote_asset: marketOption.quote_asset,
     display_name: marketOption.display_name,
-    price: marketOption.price,
+    price: marketOption.price_exact ?? marketOption.price,
   };
   const response = await apiClient.post('/subscriptions', payload);
   return response.data;

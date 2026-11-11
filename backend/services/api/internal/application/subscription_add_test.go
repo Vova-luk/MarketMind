@@ -93,8 +93,12 @@ func TestAddSubscriptionAcceptsSearchResultAndReusesMarket(t *testing.T) {
 	body["display_name"] = "BTC/USDT"
 	body["price"] = nil
 	post(123, body, http.StatusBadRequest, "VALIDATION_ERROR")
-	body["price"] = quotedPrice
-	res := post(123, body, http.StatusCreated, quotedPrice)
+	body["price"] = "83781.12"
+	body["price_exact"] = quotedPrice
+	res := post(123, body, http.StatusCreated, `"price":"83781.12","price_exact":"83781.123456789012345678"`)
+	if store.market.Price == nil || *store.market.Price != quotedPrice {
+		t.Fatal("market seed must retain its original precision")
+	}
 	if res.Header().Get("Location") != "/api/v1/subscriptions/18" {
 		t.Fatalf("unexpected Location: %q", res.Header().Get("Location"))
 	}
@@ -104,7 +108,7 @@ func TestAddSubscriptionAcceptsSearchResultAndReusesMarket(t *testing.T) {
 	body["price"] = "1"
 	body["base_asset"] = "ETH"
 	post(123, body, http.StatusOK, `"subscription_id":"18"`)
-	post(456, body, http.StatusCreated, `"price":"84000"`)
+	post(456, body, http.StatusCreated, `"price":"84000.00"`)
 	if store.market.Price != &latestPrice || store.market.BaseAsset != "BTC" || len(store.owners) != 2 {
 		t.Fatal("reusing the market must preserve its data and one subscription per user")
 	}

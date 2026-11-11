@@ -130,9 +130,9 @@ func TestSubscriptionDetailRoute(t *testing.T) {
 		body   string
 	}{
 		{"/api/v1/subscriptions/18?unused=1", http.StatusOK,
-			`{"subscription_id":"18","base_asset":"BTC","quote_asset":"USDT","exchange_name":"Binance","price":"83781.00000000000001","updated_at":"2026-11-09T08:30:00Z","alerts":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781","target_price":"87970.05","is_active":true}]}`},
+			`{"subscription_id":"18","base_asset":"BTC","quote_asset":"USDT","exchange_name":"Binance","price":"83781.00","price_exact":"83781.00000000000001","updated_at":"2026-11-09T08:30:00Z","alerts":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781.00","target_price":"87970.05","is_active":true}]}`},
 		{"/api/v1/subscriptions/18/alerts", http.StatusOK,
-			`{"items":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781","target_price":"87970.05","is_active":true,"quote_asset":"USDT"}],"next_page":null}`},
+			`{"items":[{"alert_id":"9","type":"percent","value":"5","direction":"gte","reference_price":"83781.00","target_price":"87970.05","is_active":true,"quote_asset":"USDT"}],"next_page":null}`},
 		{"/api/v1/subscriptions/018", http.StatusBadRequest,
 			`{"error":{"code":"VALIDATION_ERROR","message":"Invalid subscription ID"}}`},
 	} {
