@@ -113,7 +113,7 @@ export default function App() {
         alerts: [...(prev.alerts || []), createdAlert],
       }));
     } catch (e) {
-      const refPrice = Number(selectedDetail.price || 0);
+      const refPrice = Number(selectedDetail.price_exact ?? selectedDetail.price ?? 0);
       const targetPrice =
         alertPayload.type === 'price'
           ? alertPayload.value

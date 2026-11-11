@@ -43,12 +43,13 @@ func readAddRequest(w http.ResponseWriter, r *http.Request) (domain.MarketKey, d
 	}
 
 	var body struct {
-		ExchangeID  int32  `json:"exchange_id"`
-		ExternalID  string `json:"external_id"`
-		BaseAsset   string `json:"base_asset"`
-		QuoteAsset  string `json:"quote_asset"`
-		Price       string `json:"price"`
-		DisplayName string `json:"display_name"`
+		ExchangeID  int32   `json:"exchange_id"`
+		ExternalID  string  `json:"external_id"`
+		BaseAsset   string  `json:"base_asset"`
+		QuoteAsset  string  `json:"quote_asset"`
+		Price       string  `json:"price"`
+		PriceExact  *string `json:"price_exact"`
+		DisplayName string  `json:"display_name"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024))
 	decoder.DisallowUnknownFields()
@@ -61,7 +62,11 @@ func readAddRequest(w http.ResponseWriter, r *http.Request) (domain.MarketKey, d
 		httpresponse.WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid exchange_id or external_id")
 		return domain.MarketKey{}, domain.MarketSeed{}, false
 	}
-	return key, domain.MarketSeed{BaseAsset: body.BaseAsset, QuoteAsset: body.QuoteAsset, Price: body.Price}, true
+	price := body.Price
+	if body.PriceExact != nil {
+		price = *body.PriceExact
+	}
+	return key, domain.MarketSeed{BaseAsset: body.BaseAsset, QuoteAsset: body.QuoteAsset, Price: price}, true
 }
 
 func (h *Handler) writeAddError(w http.ResponseWriter, r *http.Request, err error) {

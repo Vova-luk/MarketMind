@@ -51,7 +51,7 @@ func TestConsumeCommitsOnlyAfterWholeBatchIsDelivered(t *testing.T) {
 				if r.Method != http.MethodPost || r.URL.Path != "/bottest-token/sendMessage" {
 					t.Errorf("unexpected Telegram request: %s %s", r.Method, r.URL.Path)
 				}
-				const wantText = "Сработал алерт!\nМонета: BTC/USDT (Binance)\nЦена при настройке алерта: 100 USDT\nАктуальная цена: 106 USDT\nУсловие срабатывания: ≥ +5%"
+				const wantText = "Сработал алерт!\nМонета: BTC/USDT (Binance)\nЦена при настройке алерта: 100.00 USDT\nАктуальная цена: 106.13 USDT\nУсловие срабатывания: ≥ +5%"
 				if request.Text != wantText {
 					t.Errorf("unexpected message: %q", request.Text)
 				}
@@ -81,7 +81,7 @@ func TestConsumeCommitsOnlyAfterWholeBatchIsDelivered(t *testing.T) {
 			consumer := NewPriceChangedConsumer(config.KafkaConfig{}, service.NewService(client, 2, logger), logger)
 			item := events.PriceNotification{
 				TelegramUserID: 1234567890123, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance",
-				Type: alerts.Percent, Value: "5", Direction: alerts.GreaterOrEqual, ReferencePrice: "100", CurrentPrice: "106",
+				Type: alerts.Percent, Value: "5", Direction: alerts.GreaterOrEqual, ReferencePrice: "100", CurrentPrice: "106.126",
 			}
 			second := item
 			second.TelegramUserID++

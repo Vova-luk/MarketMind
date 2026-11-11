@@ -12,7 +12,7 @@ export default function CoinSheet({
   const [priceDirection, setPriceDirection] = useState('gte'); // 'gte' | 'lte'
   const [inputError, setInputError] = useState('');
 
-  const currentPrice = Number(detail.price || 0);
+  const currentPrice = Number(detail.price_exact ?? detail.price ?? 0);
 
   const handlePriceChange = (e) => {
     const val = e.target.value;

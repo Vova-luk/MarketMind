@@ -103,7 +103,7 @@ func TestAlertMutationRoutes(t *testing.T) {
 	}
 
 	const createBody = `{"type":"percent","value":"5","direction":"lte"}`
-	const firstTarget = "87970.0500000000000105"
+	const firstTarget = "87970.05"
 	res := request(http.MethodPost, collection, createBody, 123, http.StatusCreated)
 	assertDirection(res, firstTarget, alerts.LessOrEqual)
 	if res.Header().Get("Location") != resource {
@@ -125,7 +125,7 @@ func TestAlertMutationRoutes(t *testing.T) {
 	store.subscription.ExchangeActive = true
 	assertDirection(request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusOK), firstTarget, alerts.LessOrEqual)
 	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5","direction":"gte"}`, 123, http.StatusOK), firstTarget, alerts.GreaterOrEqual)
-	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500", alerts.GreaterOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500.00", alerts.GreaterOrEqual)
 
 	res = request(http.MethodDelete, resource, "", 123, http.StatusNoContent)
 	if res.Body.Len() != 0 {

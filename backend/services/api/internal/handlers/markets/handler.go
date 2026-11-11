@@ -14,6 +14,7 @@ import (
 	"marketmind/api/internal/domain/exchanges"
 	service "marketmind/api/internal/service/markets"
 	"marketmind/api/internal/utils/httpresponse"
+	"marketmind/utils/priceformat"
 )
 
 type MarketSearcher interface {
@@ -36,6 +37,7 @@ type marketOption struct {
 	QuoteAsset  string  `json:"quote_asset"`
 	DisplayName string  `json:"display_name"`
 	Price       *string `json:"price"`
+	PriceExact  *string `json:"price_exact"`
 }
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +67,8 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		items = append(items, marketOption{
 			ExchangeID: query.ExchangeID, ExternalID: instrument.ExternalID,
 			BaseAsset: instrument.BaseAsset, QuoteAsset: instrument.QuoteAsset,
-			DisplayName: instrument.BaseAsset + "/" + instrument.QuoteAsset, Price: instrument.Price,
+			DisplayName: instrument.BaseAsset + "/" + instrument.QuoteAsset,
+			Price:       priceformat.OptionalTwoDecimals(instrument.Price), PriceExact: instrument.Price,
 		})
 	}
 	httpresponse.WriteJSON(w, http.StatusOK, struct {

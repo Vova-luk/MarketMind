@@ -5,6 +5,7 @@ import (
 
 	domainsubscriptions "marketmind/api/internal/domain/subscriptions"
 	"marketmind/api/pkg/alerts"
+	"marketmind/utils/priceformat"
 )
 
 type subscriptionResponse struct {
@@ -13,6 +14,7 @@ type subscriptionResponse struct {
 	QuoteAsset   string  `json:"quote_asset"`
 	ExchangeName string  `json:"exchange_name"`
 	Price        *string `json:"price"`
+	PriceExact   *string `json:"price_exact"`
 }
 
 type detailResponse struct {
@@ -37,14 +39,18 @@ func toSubscriptionResponse(subscription domainsubscriptions.Subscription) subsc
 		BaseAsset:    subscription.BaseAsset,
 		QuoteAsset:   subscription.QuoteAsset,
 		ExchangeName: subscription.ExchangeName,
-		Price:        subscription.Price,
+		Price:        priceformat.OptionalTwoDecimals(subscription.Price),
+		PriceExact:   subscription.Price,
 	}
 }
 
 func toDetailResponse(detail domainsubscriptions.Detail) detailResponse {
 	alerts := make([]alertResponse, 0, len(detail.Alerts))
 	for _, alert := range detail.Alerts {
-		alerts = append(alerts, alertResponse(alert))
+		response := alertResponse(alert)
+		response.ReferencePrice = priceformat.TwoDecimals(response.ReferencePrice)
+		response.TargetPrice = priceformat.TwoDecimals(response.TargetPrice)
+		alerts = append(alerts, response)
 	}
 	return detailResponse{
 		subscriptionResponse: toSubscriptionResponse(detail.Subscription),
