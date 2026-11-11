@@ -2,18 +2,47 @@ name: marketmind
 
 include:
   - compose.postgres.yaml
+  - compose.kafka.yaml
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
+  kafka-init:
+    image: apache/kafka:latest
+    logging: *logging
+    depends_on:
+      - broker-1
+      - broker-2
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for attempt in 1 2 3 4 5; do
+          if /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker-1:19092,broker-2:19092 \
+            --create --if-not-exists --topic Price-Checked-Topic --partitions 3 --replication-factor 2; then
+            exit 0
+          fi
+          sleep 2
+        done
+        exit 1
+
   api:
     build:
       context: ..
       dockerfile: services/api/Dockerfile
     restart: unless-stopped
+    logging: *logging
     env_file:
       - ../.env
     environment:
       MARKETMIND_SERVER__HOST: 0.0.0.0
       MARKETMIND_SERVER__PORT: "8080"
+      MARKETMIND_GRPC__HOST: 0.0.0.0
+      MARKETMIND_GRPC__PORT: "50051"
+      MARKETMIND_EXCHANGE_DATA__ADDRESS: exchange-data:9090
       MARKETMIND_DATABASE__HOST: postgres
       MARKETMIND_DATABASE__PORT: "5432"
       MARKETMIND_DATABASE__USER: ${MARKETMIND_DATABASE__USER:-marketmind}
@@ -22,14 +51,85 @@ services:
       MARKETMIND_LOGGER__FILE: /app/logs/api.log
     ports:
       - "${MARKETMIND_SERVER__PORT:-8080}:8080"
+    expose:
+      - "50051"
     volumes:
       - ../services/api/config/config.yaml:/app/config/config.yaml:ro
       - api_logs:/app/logs
     depends_on:
+      exchange-data:
+        condition: service_started
       postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 5m
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+
+  exchange-data:
+    build:
+      context: ..
+      dockerfile: services/exchange-data/Dockerfile
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      EXCHANGE_DATA_GRPC_HOST: 0.0.0.0
+      EXCHANGE_DATA_API_ADDRESS: api:50051
+      EXCHANGE_DATA_KAFKA_BROKERS: broker-1:19092,broker-2:19092
+    expose:
+      - "9090"
+    volumes:
+      - ../services/exchange-data/config/config.yaml:/app/config/config.yaml:ro
+    depends_on:
+      - broker-1
+      - broker-2
+    stop_grace_period: 15s
+
+  tracking:
+    build:
+      context: ..
+      dockerfile: services/tracking/Dockerfile
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${MARKETMIND_DATABASE__USER:-marketmind}
+      DB_PASSWORD: ${MARKETMIND_DATABASE__PASSWORD:?Set MARKETMIND_DATABASE__PASSWORD in backend/.env}
+      DB_NAME: ${MARKETMIND_DATABASE__DATABASE:-marketmind}
+      DB_SSLMODE: ${MARKETMIND_DATABASE__SSLMODE:-disable}
+      KAFKA_BROKERS: broker-1:19092,broker-2:19092
+    depends_on:
+      api:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8182/health"]
+      interval: 5m
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+
+  bot:
+    build:
+      context: ..
+      dockerfile: services/bot/Dockerfile
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      BOT_KAFKA_BROKERS: broker-1:19092,broker-2:19092
+      BOT_KAFKA_WORKERS: ${BOT_KAFKA_WORKERS:-1}
+    depends_on:
+      tracking:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8183/health"]
       interval: 5m
       timeout: 3s
       retries: 3

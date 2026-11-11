@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
 	"marketmind/api/internal/server"
 	"marketmind/utils/config"
@@ -20,6 +21,7 @@ type Application struct {
 	database      *pgxpool.Pool
 	router        http.Handler
 	server        *server.Server
+	grpcServer    *server.GRPCServer
 	shutdownFuncs []func() error
 }
 
@@ -42,8 +44,13 @@ func NewApplication(ctx context.Context, configPath string) (_ *Application, err
 	if err = a.initMigrator(ctx); err != nil {
 		return nil, err
 	}
-	a.initRouter()
+	if err = a.initRouter(); err != nil {
+		return nil, err
+	}
 	if err = a.initServer(); err != nil {
+		return nil, err
+	}
+	if err = a.initGRPC(); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -55,12 +62,22 @@ func (a *Application) Run(ctx context.Context) error {
 	group, ctx := errgroup.WithContext(ctx)
 	a.logger.Info("HTTP server starting", "address", a.server.Addr)
 	group.Go(func() error {
-		defer cancel()
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("serve HTTP: %w", err)
 		}
+		cancel()
 		return nil
 	})
+	if a.grpcServer != nil {
+		a.logger.Info("gRPC server starting", "address", a.grpcServer.Addr)
+		group.Go(func() error {
+			if err := a.grpcServer.ListenAndServe(); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+				return fmt.Errorf("serve gRPC: %w", err)
+			}
+			cancel()
+			return nil
+		})
+	}
 	group.Go(func() error {
 		<-ctx.Done()
 		return a.shutdown()
