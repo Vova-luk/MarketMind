@@ -18,6 +18,8 @@ apiClient.interceptors.request.use((config) => {
 
   if (config.data !== undefined) {
     config.headers['Content-Type'] = 'application/json';
+  } else {
+    delete config.headers['Content-Type'];
   }
 
   return config;
