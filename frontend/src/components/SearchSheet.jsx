@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Trash2, Bookmark, ChevronDown } from 'lucide-react';
+import { Search, Trash2, Bookmark, ChevronDown, Check } from 'lucide-react';
 import { searchMarketsApi } from '../api/marketApi';
 import { triggerHaptic } from '../utils/telegram';
 
@@ -11,8 +11,8 @@ export default function SearchSheet({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortAsc, setSortAsc] = useState(false);
 
-  const [selectedExchangeIds, setSelectedExchangeIds] = useState(() =>
-    exchanges.length > 0 ? [exchanges[0].id] : [1]
+  const [selectedExchangeId, setSelectedExchangeId] = useState(() =>
+    exchanges.length > 0 ? exchanges[0].id : 1
   );
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
@@ -21,10 +21,13 @@ export default function SearchSheet({
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    if (exchanges.length > 0 && selectedExchangeIds.length === 0) {
-      setSelectedExchangeIds([exchanges[0].id]);
+    if (
+      exchanges.length > 0 &&
+      !exchanges.some((e) => e.id === selectedExchangeId)
+    ) {
+      setSelectedExchangeId(exchanges[0].id);
     }
-  }, [exchanges, selectedExchangeIds.length]);
+  }, [exchanges, selectedExchangeId]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -37,18 +40,15 @@ export default function SearchSheet({
   }, []);
 
   useEffect(() => {
-    if (selectedExchangeIds.length === 0) return;
+    if (!selectedExchangeId) return;
 
     let active = true;
     const loadMarkets = async () => {
       setLoading(true);
       try {
-        const responses = await Promise.all(
-          selectedExchangeIds.map((id) => searchMarketsApi(id, searchQuery))
-        );
+        const res = await searchMarketsApi(selectedExchangeId, searchQuery);
         if (active) {
-          const combined = responses.flatMap((res) => res.items || []);
-          setMarkets(combined);
+          setMarkets(res.items || []);
           setLoading(false);
         }
       } catch (e) {
@@ -82,11 +82,14 @@ export default function SearchSheet({
     return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
   };
 
-  const getDropdownButtonLabel = () => {
-    if (selectedExchangeIds.length === 1) {
-      return getExchangeName(selectedExchangeIds[0]);
-    }
-    return `Биржи (${selectedExchangeIds.length})`;
+  const handleSelectExchange = (exchangeId) => {
+    triggerHaptic('light');
+    setSelectedExchangeId(exchangeId);
+    setIsDropdownOpen(false);
+  };
+
+  const getExchangeName = (exchangeId) => {
+    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
   };
 
   const findExistingSubscription = (market) => {
@@ -134,7 +137,7 @@ export default function SearchSheet({
               onClick={() => setIsDropdownOpen((prev) => !prev)}
               className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium text-gray-800 flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <span>{getDropdownButtonLabel()}</span>
+              <span>{getExchangeName(selectedExchangeId)}</span>
               <ChevronDown
                 className={`w-3.5 h-3.5 transition-transform duration-150 ${
                   isDropdownOpen ? 'rotate-180' : ''
@@ -143,39 +146,24 @@ export default function SearchSheet({
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute left-0 mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 z-40">
-                <div className="px-3 py-1 text-[10px] text-gray-400 border-b border-gray-100">
-                  Выберите минимум 1 биржу
-                </div>
+              <div className="absolute left-0 mt-1.5 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-40 overflow-hidden">
                 {exchanges.map((exchange) => {
-                  const isChecked = selectedExchangeIds.includes(exchange.id);
-                  const isLastSelected =
-                    isChecked && selectedExchangeIds.length === 1;
+                  const isSelected = exchange.id === selectedExchangeId;
 
                   return (
-                    <label
+                    <button
                       key={exchange.id}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleToggleExchange(exchange.id);
-                      }}
-                      className={`flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer ${
-                        isLastSelected ? 'opacity-75' : ''
+                      type="button"
+                      onClick={() => handleSelectExchange(exchange.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-800 hover:bg-gray-50'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          readOnly
-                          className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
-                        />
-                        <span className="text-gray-800">{exchange.name}</span>
-                      </div>
-                      {isLastSelected && (
-                        <span className="text-[10px] text-gray-400">обяз.</span>
-                      )}
-                    </label>
+                      <span>{exchange.name}</span>
+                      {isSelected && <Check className="w-4 h-4 text-blue-600" />}
+                    </button>
                   );
                 })}
               </div>
@@ -189,7 +177,7 @@ export default function SearchSheet({
             setSearchQuery('');
             setSortAsc(false);
             if (exchanges.length > 0) {
-              setSelectedExchangeIds([exchanges[0].id]);
+              setSelectedExchangeId(exchanges[0].id);
             }
             setIsDropdownOpen(false);
           }}
