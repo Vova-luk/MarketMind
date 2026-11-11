@@ -24,11 +24,28 @@ export default function App() {
   const [activeSheet, setActiveSheet] = useState(null); 
   const [selectedDetail, setSelectedDetail] = useState(null);
 
+  const [subToDelete, setSubToDelete] = useState(null);
+
+  const handleConfirmDeleteSubscription = async () => {
+    if (!subToDelete) return;
+    triggerHaptic('medium');
+
+    const idToRemove = subToDelete.subscription_id;
+    setSubscriptions((prev) =>
+      prev.filter((s) => s.subscription_id !== idToRemove)
+    );
+    setSubToDelete(null);
+
+    try {
+      await deleteSubscriptionApi(idToRemove);
+    } catch (e) {}
+  };
+
   const loadInitial = async () => {
     setIsLoading(true);
     const data = await initAppData();
-    if (data.user?.firstName) {
-      setUserName(data.user.firstName);
+    if (data.user?.username) {
+      setUserName(data.user.username);
     }
     setExchanges(data.exchanges);
     setSubscriptions(data.subscriptions);
@@ -62,12 +79,7 @@ export default function App() {
 
     if (existingSub) {
       //удалить
-      setSubscriptions((prev) =>
-        prev.filter((s) => s.subscription_id !== existingSub.subscription_id)
-      );
-      try {
-        await deleteSubscriptionApi(existingSub.subscription_id);
-      } catch (e) {}
+      setSubToDelete(existingSub);
     } else {
       // добавить
       try {
@@ -185,9 +197,14 @@ export default function App() {
               key={sub.subscription_id}
               subscription={sub}
               onClick={handleOpenSubscription}
+              onRequestDelete={(targetSub) => {
+                triggerHaptic('light');
+                setSubToDelete(targetSub);
+              }}
             />
           ))
         )}
+        
       </main>
 
       {!activeSheet && (
@@ -234,6 +251,44 @@ export default function App() {
                 onDeleteAlert={handleDeleteAlert}
               />
             )}
+          </div>
+        </div>
+      )}
+      {/* Модальное окно подтверждения удаления подписки */}
+      {subToDelete && (
+        <div
+          onClick={() => setSubToDelete(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs bg-white rounded-2xl p-5 shadow-xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-150"
+          >
+            <h3 className="text-base font-medium text-black">
+              Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
+              {subToDelete.exchange_name})?
+            </h3>
+            {/* {<p className="text-xs text-gray-500 leading-relaxed">
+              Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
+              {subToDelete.exchange_name})?
+            </p>} */}
+           
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setSubToDelete(null)}
+                className="py-2 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 cursor-pointer transition-colors"
+              >
+                не
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteSubscription}
+                className="py-2 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white cursor-pointer transition-colors"
+              >
+                газ
+              </button>
+            </div>
           </div>
         </div>
       )}

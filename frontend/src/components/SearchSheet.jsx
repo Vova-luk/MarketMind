@@ -61,7 +61,7 @@ export default function SearchSheet({
       active = false;
       clearTimeout(timer);
     };
-  }, [selectedExchangeIds, searchQuery]);
+  }, [selectedExchangeId, searchQuery]);
 
   const handleToggleExchange = (exchangeId) => {
     triggerHaptic('light');
