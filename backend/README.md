@@ -22,7 +22,7 @@ curl -i http://localhost:8080/health
 ```
 
 Compose запускает PostgreSQL, Kafka, Kafka UI, API, Exchange Data, Tracking и Bot.
-Kafka автоматически создаёт топики при первом обращении, а Tracking ждёт завершения миграций API.
+Tracking ждёт завершения миграций API и создания топика `Price-Checked-Topic`.
 Для запуска без токена выполните ту же команду `up` без `--profile notifications`.
 Конфиги API и Exchange Data монтируются только для чтения. Логи по умолчанию
 пишутся в stdout.
@@ -31,6 +31,23 @@ Kafka автоматически создаёт топики при первом
 docker compose --env-file .env -f deploy/compose.yaml --profile notifications logs -f tracking bot
 docker compose --env-file .env -f deploy/compose.yaml --profile notifications down
 ```
+
+### Ротация логов
+
+Docker хранит stdout и stderr каждого контейнера через драйвер `local`.
+На контейнер выделено до трёх файлов по 10 МБ. Docker сжимает закрытые файлы
+и удаляет самый старый файл при очередной ротации.
+
+Чтобы применить настройки к уже запущенному стеку, выполните из `backend`:
+
+```bash
+docker compose --env-file .env -f deploy/compose.yaml --profile notifications up -d
+```
+
+При запуске без бота опустите `--profile notifications`. Compose пересоздаст
+контейнеры с изменившейся конфигурацией и сохранит подключённые тома.
+История `docker compose logs` старых контейнеров будет удалена вместе с ними.
+Если API настроен на `logger.output: file`, его файл нужно ротировать отдельно.
 
 ## PostgreSQL в Docker, API локально
 
@@ -109,8 +126,9 @@ Kafka UI доступен на <http://localhost:8081>. В кластере `Mar
 
 `Price-Checked-Topic` передаёт цены от Exchange-Data-Service в Tracking-Service,
 а `Price-Changed-Topic` — события от Tracking-Service в Bot-Service.
-Брокеры автоматически создают новые топики при первом обращении с тремя
-партициями и двумя репликами. Эти значения применяются при создании топика.
+При полном запуске бэкенда Compose создаёт `Price-Checked-Topic` с тремя
+партициями и двумя репликами до запуска Tracking. Для остальных топиков
+доступно автоматическое создание с теми же параметрами.
 
 Команды для проверки списка топиков и реплик.
 

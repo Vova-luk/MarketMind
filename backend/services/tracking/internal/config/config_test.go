@@ -16,6 +16,7 @@ func clearConfigEnv(t *testing.T) {
 		"KAFKA_BROKERS", "KAFKA_GROUP_ID", "KAFKA_TOPIC_PRICE_CHECKED", "KAFKA_TOPIC_PRICE_CHANGED",
 		"TRACKING_SERVER_HOST", "TRACKING_SERVER_PORT", "TRACKING_SERVER_READ_TIMEOUT",
 		"TRACKING_SERVER_WRITE_TIMEOUT", "TRACKING_SERVER_SHUTDOWN_TIMEOUT",
+		"TRACKING_SERVER_HEARTBEAT_INTERVAL",
 	} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
@@ -31,7 +32,7 @@ func TestLoadExampleYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Server.Port != 8182 || cfg.Server.ReadTimeout != 5*time.Second {
+	if cfg.Server.Port != 8182 || cfg.Server.ReadTimeout != 5*time.Second || cfg.Server.HeartbeatInterval != 30*time.Minute {
 		t.Fatal("server YAML was not decoded")
 	}
 	if cfg.DB.Port != "5432" || cfg.DB.Name != "marketmind" || cfg.DB.ConnectTimeout != 5*time.Second || cfg.DB.PoolMaxConns != 10 {
@@ -50,9 +51,13 @@ func TestLoadDotenvAndProcessOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("TRACKING_SERVER_PORT", "8383")
+	t.Setenv("TRACKING_SERVER_HEARTBEAT_INTERVAL", "45m")
 	cfg, err := Load("../../config/config.yaml", path)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Server.HeartbeatInterval != 45*time.Minute {
+		t.Fatal("environment heartbeat interval did not override YAML")
 	}
 	if cfg.Server.Port != 8383 || cfg.DB.Password != "test-password" || cfg.DB.ConnectTimeout != 8*time.Second {
 		t.Fatal("expected process > dotenv > YAML precedence")
@@ -66,6 +71,7 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
 		{"TRACKING_SERVER_PORT", "invalid"},
 		{"TRACKING_SERVER_PORT", "0"},
+		{"TRACKING_SERVER_HEARTBEAT_INTERVAL", "-1m"},
 		{"DB_CONNECT_TIMEOUT", "invalid"},
 		{"DB_CONNECT_TIMEOUT", "0s"},
 		{"DB_PASSWORD", ""},

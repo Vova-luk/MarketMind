@@ -4,6 +4,7 @@ server:
   read_timeout: 5s
   write_timeout: 10s
   shutdown_timeout: 10s
+  heartbeat_interval: 30m
 
 grpc:
   host: "127.0.0.1"
@@ -19,7 +20,7 @@ kafka:
   price_checked_topic: Price-Checked-Topic
 
 scheduler:
-  interval: 10s
+  interval: 1m
   exchanges: [binance, bybit, okx]
 
 exchanges:

@@ -29,6 +29,17 @@ func TestNewServerAppliesTimeoutsAndDefaultLogger(t *testing.T) {
 	if srv.logger != slog.Default() || srv.Server.WriteTimeout != cfg.WriteTimeout || srv.shutdownTimeout != cfg.ShutdownTimeout {
 		t.Fatal("logger or configured timeouts were not applied")
 	}
+	if srv.heartbeatInterval != 30*time.Minute {
+		t.Fatalf("default heartbeat interval = %v, want 30m", srv.heartbeatInterval)
+	}
+	cfg.HeartbeatInterval = 45 * time.Minute
+	srv, err = NewServer(cfg, http.NewServeMux(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srv.heartbeatInterval != cfg.HeartbeatInterval {
+		t.Fatalf("heartbeat interval = %v, want %v", srv.heartbeatInterval, cfg.HeartbeatInterval)
+	}
 	cfg.WriteTimeout = 0
 	if _, err := NewServer(cfg, http.NewServeMux(), nil); err == nil {
 		t.Fatal("invalid timeout was accepted")

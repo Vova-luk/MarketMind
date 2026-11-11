@@ -14,18 +14,19 @@ import (
 )
 
 const (
-	heartbeatInterval = 10 * time.Second
-	addressLogKey     = "addr"
-	serverRunning     = "server is running"
-	serverAlive       = "server is alive"
-	serverStopping    = "shutting down server"
-	serverStopped     = "server exited cleanly"
+	defaultHeartbeatInterval = 30 * time.Minute
+	addressLogKey            = "addr"
+	serverRunning            = "server is running"
+	serverAlive              = "server is alive"
+	serverStopping           = "shutting down server"
+	serverStopped            = "server exited cleanly"
 )
 
 type Server struct {
-	Server          *http.Server
-	logger          *slog.Logger
-	shutdownTimeout time.Duration
+	Server            *http.Server
+	logger            *slog.Logger
+	shutdownTimeout   time.Duration
+	heartbeatInterval time.Duration
 }
 
 func NewServer(cfg config.ServerConfig, router http.Handler, logger *slog.Logger) (*Server, error) {
@@ -35,6 +36,9 @@ func NewServer(cfg config.ServerConfig, router http.Handler, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if cfg.HeartbeatInterval == 0 {
+		cfg.HeartbeatInterval = defaultHeartbeatInterval
+	}
 	return &Server{
 		Server: &http.Server{
 			Addr:         net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
@@ -43,8 +47,9 @@ func NewServer(cfg config.ServerConfig, router http.Handler, logger *slog.Logger
 			WriteTimeout: cfg.WriteTimeout,
 			ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 		},
-		logger:          logger,
-		shutdownTimeout: cfg.ShutdownTimeout,
+		logger:            logger,
+		shutdownTimeout:   cfg.ShutdownTimeout,
+		heartbeatInterval: cfg.HeartbeatInterval,
 	}, nil
 }
 
@@ -67,7 +72,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	s.logger.InfoContext(ctx, serverRunning, slog.String(addressLogKey, addr))
 
-	ticker := time.NewTicker(heartbeatInterval)
+	ticker := time.NewTicker(s.heartbeatInterval)
 	defer ticker.Stop()
 	for {
 		select {

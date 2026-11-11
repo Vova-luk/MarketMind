@@ -88,10 +88,6 @@ export default function SearchSheet({
     setIsDropdownOpen(false);
   };
 
-  const getExchangeName = (exchangeId) => {
-    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
-  };
-
   const findExistingSubscription = (market) => {
     const exName = getExchangeName(market.exchange_id);
     return subscriptions.find(

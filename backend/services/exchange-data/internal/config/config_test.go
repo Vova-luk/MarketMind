@@ -15,6 +15,7 @@ func clearExchangeEnv(t *testing.T) {
 	for _, key := range []string{
 		"EXCHANGE_DATA_SERVER_HOST", "EXCHANGE_DATA_SERVER_PORT", "EXCHANGE_DATA_SERVER_READ_TIMEOUT",
 		"EXCHANGE_DATA_SERVER_WRITE_TIMEOUT", "EXCHANGE_DATA_SERVER_SHUTDOWN_TIMEOUT",
+		"EXCHANGE_DATA_SERVER_HEARTBEAT_INTERVAL",
 		"EXCHANGE_DATA_GRPC_HOST", "EXCHANGE_DATA_GRPC_PORT", "EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT",
 		"EXCHANGE_DATA_API_ADDRESS", "EXCHANGE_DATA_API_REQUEST_TIMEOUT",
 		"EXCHANGE_DATA_KAFKA_BROKERS", "EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "EXCHANGE_DATA_POLL_INTERVAL", "EXCHANGE_DATA_SCHEDULER_DISABLED",
@@ -36,7 +37,7 @@ func TestLoadConfigWithoutExternalConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Server.Port != 8184 || cfg.Server.ShutdownTimeout != 10*time.Second || cfg.GRPC.Port != 9090 {
+	if cfg.Server.Port != 8184 || cfg.Server.ShutdownTimeout != 10*time.Second || cfg.GRPC.Port != 9090 || cfg.Server.HeartbeatInterval != 12*time.Minute {
 		t.Fatal("server settings were not decoded")
 	}
 	if cfg.Kafka.PriceCheckedTopic != "Price-Checked-Topic" || len(cfg.Kafka.BrokerList()) != 2 {
@@ -71,9 +72,13 @@ func TestLoadDotenvAndProcessPrecedence(t *testing.T) {
 	}
 	t.Setenv("EXCHANGE_DATA_SERVER_PORT", "8384")
 	t.Setenv("EXCHANGE_DATA_KAFKA_OUTPUT_TOPIC", "process-prices")
+	t.Setenv("EXCHANGE_DATA_SERVER_HEARTBEAT_INTERVAL", "45m")
 	cfg, err := Load("testdata/config.yaml", path)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Server.HeartbeatInterval != 45*time.Minute {
+		t.Fatal("environment heartbeat interval did not override YAML")
 	}
 	if cfg.Kafka.PriceCheckedTopic != "process-prices" || cfg.Server.Port != 8384 || cfg.GRPC.Port != 9190 || cfg.Scheduler.Interval != 15*time.Second || cfg.Exchanges.OKX.Timeout != 8*time.Second {
 		t.Fatal("expected process > dotenv > YAML precedence")
@@ -87,6 +92,7 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
 		{"EXCHANGE_DATA_SERVER_PORT", "invalid"},
 		{"EXCHANGE_DATA_SERVER_PORT", "0"},
+		{"EXCHANGE_DATA_SERVER_HEARTBEAT_INTERVAL", "-1m"},
 		{"EXCHANGE_DATA_GRPC_PORT", "invalid"},
 		{"EXCHANGE_DATA_GRPC_PORT", "8184"},
 		{"EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT", "0s"},

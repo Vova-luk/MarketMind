@@ -33,11 +33,12 @@ type KafkaConfig struct {
 }
 
 type ServerConfig struct {
-	Host            string        `yaml:"host"`
-	Port            int           `yaml:"port"`
-	ReadTimeout     time.Duration `yaml:"read_timeout"`
-	WriteTimeout    time.Duration `yaml:"write_timeout"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+	Host              string        `yaml:"host"`
+	Port              int           `yaml:"port"`
+	ReadTimeout       time.Duration `yaml:"read_timeout"`
+	WriteTimeout      time.Duration `yaml:"write_timeout"`
+	ShutdownTimeout   time.Duration `yaml:"shutdown_timeout"`
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 }
 
 func (c Config) Validate() error {
@@ -83,6 +84,8 @@ func (c ServerConfig) Validate() error {
 		return fmt.Errorf("write timeout must be greater than 0")
 	case c.ShutdownTimeout <= 0:
 		return fmt.Errorf("shutdown timeout must be greater than 0")
+	case c.HeartbeatInterval < 0:
+		return fmt.Errorf("heartbeat_interval must not be negative")
 	}
 	return nil
 }
