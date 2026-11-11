@@ -37,7 +37,7 @@ func TestLoadExampleYAML(t *testing.T) {
 	if cfg.DB.Port != "5432" || cfg.DB.Name != "marketmind" || cfg.DB.ConnectTimeout != 5*time.Second || cfg.DB.PoolMaxConns != 10 {
 		t.Fatal("database YAML or defaults were not decoded")
 	}
-	if len(cfg.Kafka.Brokers) != 1 || cfg.Kafka.GroupID != "marketmind-tracking" || cfg.Kafka.PriceCheckedTopic != "Price-Checked-Topic" {
+	if len(cfg.Kafka.Brokers) != 2 || cfg.Kafka.Brokers[0] != "localhost:29092" || cfg.Kafka.Brokers[1] != "localhost:39092" || cfg.Kafka.GroupID != "marketmind-tracking" || cfg.Kafka.PriceCheckedTopic != "Price-Checked-Topic" {
 		t.Fatal("Kafka YAML was not decoded")
 	}
 }

@@ -1,0 +1,17 @@
+server:
+  host: "0.0.0.0"
+  port: 8183
+  read_timeout: 5s
+  write_timeout: 10s
+  shutdown_timeout: 10s
+
+kafka:
+  brokers:
+    - localhost:9092
+  consumer_group: marketmind-bot
+  input_topic: Price-Changed-Topic
+
+telegram:
+  api_url: https://api.telegram.org
+  request_timeout: 5s
+  mini_app_url: ""
