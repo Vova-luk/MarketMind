@@ -101,7 +101,6 @@ func (c *Config) applyEnv() error {
 		{"EXCHANGE_DATA_SERVER_READ_TIMEOUT", &c.Server.ReadTimeout},
 		{"EXCHANGE_DATA_SERVER_WRITE_TIMEOUT", &c.Server.WriteTimeout},
 		{"EXCHANGE_DATA_SERVER_SHUTDOWN_TIMEOUT", &c.Server.ShutdownTimeout},
-		{"EXCHANGE_DATA_SERVER_HEARTBEAT_INTERVAL", &c.Server.HeartbeatInterval},
 		{"EXCHANGE_DATA_GRPC_SHUTDOWN_TIMEOUT", &c.GRPC.ShutdownTimeout},
 		{"EXCHANGE_DATA_API_REQUEST_TIMEOUT", &c.API.RequestTimeout},
 		{"EXCHANGE_DATA_POLL_INTERVAL", &c.Scheduler.Interval},

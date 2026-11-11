@@ -12,7 +12,6 @@ func clearBotEnv(t *testing.T) {
 	for _, key := range []string{
 		"BOT_SERVER_HOST", "BOT_SERVER_PORT", "BOT_SERVER_READ_TIMEOUT",
 		"BOT_SERVER_WRITE_TIMEOUT", "BOT_SERVER_SHUTDOWN_TIMEOUT",
-		"BOT_SERVER_HEARTBEAT_INTERVAL",
 		"BOT_KAFKA_BROKERS", "BOT_KAFKA_GROUP_ID", "BOT_KAFKA_INPUT_TOPIC", "BOT_KAFKA_WORKERS",
 		"BOT_TOKEN", "BOT_TELEGRAM_API_URL", "BOT_TELEGRAM_TIMEOUT", "BOT_MINI_APP_URL",
 	} {
@@ -37,7 +36,7 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Server.Port != 8183 || cfg.Server.ShutdownTimeout != 10*time.Second || cfg.Server.HeartbeatInterval != 12*time.Minute {
+	if cfg.Server.Port != 8183 || cfg.Server.ShutdownTimeout != 10*time.Second {
 		t.Fatal("server YAML was not decoded")
 	}
 	if cfg.Kafka.GroupID != "marketmind-bot" || cfg.Kafka.InputTopic != "Price-Changed-Topic" || len(cfg.Kafka.Brokers) != 1 || cfg.Kafka.Workers != 1 {
@@ -58,13 +57,9 @@ func TestLoadDotenvAndProcessPrecedence(t *testing.T) {
 	t.Setenv("BOT_SERVER_PORT", "8383")
 	t.Setenv("BOT_TOKEN", "process-token")
 	t.Setenv("BOT_KAFKA_WORKERS", "3")
-	t.Setenv("BOT_SERVER_HEARTBEAT_INTERVAL", "45m")
 	cfg, err := Load("testdata/config.yaml", path)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if cfg.Server.HeartbeatInterval != 45*time.Minute {
-		t.Fatal("environment heartbeat interval did not override YAML")
 	}
 	if cfg.Server.Port != 8383 || cfg.Telegram.Token != "process-token" || cfg.Telegram.RequestTimeout != 8*time.Second {
 		t.Fatal("expected process > dotenv > YAML precedence")
@@ -78,7 +73,6 @@ func TestLoadRejectsInvalidEnvironment(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
 		{"BOT_SERVER_PORT", "invalid"},
 		{"BOT_SERVER_PORT", "0"},
-		{"BOT_SERVER_HEARTBEAT_INTERVAL", "-1m"},
 		{"BOT_SERVER_READ_TIMEOUT", "invalid"},
 		{"BOT_SERVER_SHUTDOWN_TIMEOUT", "0s"},
 		{"BOT_KAFKA_BROKERS", "broker-a:9092,"},

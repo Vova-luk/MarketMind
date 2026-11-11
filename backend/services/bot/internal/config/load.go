@@ -22,20 +22,19 @@ const (
 )
 
 const (
-	envServerHost              = "BOT_SERVER_HOST"
-	envServerPort              = "BOT_SERVER_PORT"
-	envServerReadTimeout       = "BOT_SERVER_READ_TIMEOUT"
-	envServerWriteTimeout      = "BOT_SERVER_WRITE_TIMEOUT"
-	envServerShutdownTimeout   = "BOT_SERVER_SHUTDOWN_TIMEOUT"
-	envServerHeartbeatInterval = "BOT_SERVER_HEARTBEAT_INTERVAL"
-	envKafkaBrokers            = "BOT_KAFKA_BROKERS"
-	envKafkaGroupID            = "BOT_KAFKA_GROUP_ID"
-	envKafkaInputTopic         = "BOT_KAFKA_INPUT_TOPIC"
-	envKafkaWorkers            = "BOT_KAFKA_WORKERS"
-	envTelegramToken           = "BOT_TOKEN"
-	envTelegramAPIURL          = "BOT_TELEGRAM_API_URL"
-	envTelegramTimeout         = "BOT_TELEGRAM_TIMEOUT"
-	envMiniAppURL              = "BOT_MINI_APP_URL"
+	envServerHost            = "BOT_SERVER_HOST"
+	envServerPort            = "BOT_SERVER_PORT"
+	envServerReadTimeout     = "BOT_SERVER_READ_TIMEOUT"
+	envServerWriteTimeout    = "BOT_SERVER_WRITE_TIMEOUT"
+	envServerShutdownTimeout = "BOT_SERVER_SHUTDOWN_TIMEOUT"
+	envKafkaBrokers          = "BOT_KAFKA_BROKERS"
+	envKafkaGroupID          = "BOT_KAFKA_GROUP_ID"
+	envKafkaInputTopic       = "BOT_KAFKA_INPUT_TOPIC"
+	envKafkaWorkers          = "BOT_KAFKA_WORKERS"
+	envTelegramToken         = "BOT_TOKEN"
+	envTelegramAPIURL        = "BOT_TELEGRAM_API_URL"
+	envTelegramTimeout       = "BOT_TELEGRAM_TIMEOUT"
+	envMiniAppURL            = "BOT_MINI_APP_URL"
 )
 
 // Load applies defaults, YAML and environment overrides, then validates Config.
@@ -113,7 +112,6 @@ func (c *Config) applyEnv() error {
 		{envServerReadTimeout, &c.Server.ReadTimeout},
 		{envServerWriteTimeout, &c.Server.WriteTimeout},
 		{envServerShutdownTimeout, &c.Server.ShutdownTimeout},
-		{envServerHeartbeatInterval, &c.Server.HeartbeatInterval},
 		{envTelegramTimeout, &c.Telegram.RequestTimeout},
 	} {
 		if value, ok := os.LookupEnv(field.name); ok {

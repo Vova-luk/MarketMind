@@ -99,7 +99,6 @@ func (c *Config) applyEnv() error {
 		{"TRACKING_SERVER_READ_TIMEOUT", &c.Server.ReadTimeout},
 		{"TRACKING_SERVER_WRITE_TIMEOUT", &c.Server.WriteTimeout},
 		{"TRACKING_SERVER_SHUTDOWN_TIMEOUT", &c.Server.ShutdownTimeout},
-		{"TRACKING_SERVER_HEARTBEAT_INTERVAL", &c.Server.HeartbeatInterval},
 	} {
 		if value, ok := os.LookupEnv(field.name); ok {
 			parsed, err := time.ParseDuration(value)
