@@ -81,7 +81,7 @@ func TestConsumeCommitsOnlyAfterWholeBatchIsDelivered(t *testing.T) {
 			logger := slog.New(slog.DiscardHandler)
 			consumer := NewPriceChangedConsumer(config.KafkaConfig{}, service.NewService(client, 2, logger), logger)
 			item := events.PriceNotification{
-				TelegramUserID: 1234567890123, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance & Co",
+				TelegramUserID: 1234567890123, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance",
 				Type: alerts.Percent, Value: "5", Direction: alerts.GreaterOrEqual, ReferencePrice: "100", CurrentPrice: "106.126",
 			}
 			second := item

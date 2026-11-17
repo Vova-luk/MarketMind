@@ -10,10 +10,11 @@ export const initTelegram = () => {
 };
 
 export const getTelegramUser = () => {
+  const user = tg?.initDataUnsafe?.user;
+
   return {
-    id: tg?.initDataUnsafe?.user?.id || null,
-    firstName: tg?.initDataUnsafe?.user?.first_name || 'Пользователь',
-    username: tg?.initDataUnsafe?.user?.username || '',
+    userId: user?.id ? String(user.id) : null,
+    username: user?.first_name || 'Пользователь',
     initData: tg?.initData || '',
   };
 };

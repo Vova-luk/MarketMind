@@ -19,7 +19,7 @@ kafka:
   price_checked_topic: Price-Checked-Topic
 
 scheduler:
-  interval: 10s
+  interval: 1m
   exchanges: [binance, bybit, okx]
 
 exchanges:

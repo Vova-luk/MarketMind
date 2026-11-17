@@ -13,8 +13,6 @@ import (
 	"marketmind/tracking/internal/config"
 )
 
-const heartbeatInterval = 10 * time.Second
-
 type Server struct {
 	Server          *http.Server
 	logger          *slog.Logger
@@ -60,20 +58,14 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	s.logger.InfoContext(ctx, "server is running", slog.String("addr", addr))
 
-	ticker := time.NewTicker(heartbeatInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			s.logger.InfoContext(ctx, "server is alive", slog.String("addr", addr))
-		case <-ctx.Done():
-			return s.shutdown(errChan)
-		case err := <-errChan:
-			if err != nil {
-				return fmt.Errorf("serve HTTP: %w", err)
-			}
-			return nil
+	select {
+	case <-ctx.Done():
+		return s.shutdown(errChan)
+	case err := <-errChan:
+		if err != nil {
+			return fmt.Errorf("serve HTTP: %w", err)
 		}
+		return nil
 	}
 }
 
