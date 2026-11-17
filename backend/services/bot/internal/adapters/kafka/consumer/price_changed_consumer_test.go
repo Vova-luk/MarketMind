@@ -40,8 +40,9 @@ func TestConsumeCommitsOnlyAfterWholeBatchIsDelivered(t *testing.T) {
 			var attempts []int64
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request struct {
-					ChatID int64  `json:"chat_id"`
-					Text   string `json:"text"`
+					ChatID    int64  `json:"chat_id"`
+					Text      string `json:"text"`
+					ParseMode string `json:"parse_mode"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Error(err)
@@ -51,9 +52,9 @@ func TestConsumeCommitsOnlyAfterWholeBatchIsDelivered(t *testing.T) {
 				if r.Method != http.MethodPost || r.URL.Path != "/bottest-token/sendMessage" {
 					t.Errorf("unexpected Telegram request: %s %s", r.Method, r.URL.Path)
 				}
-				const wantText = "Сработал алерт!\nМонета: BTC/USDT (Binance)\nЦена при настройке алерта: 100.00 USDT\nАктуальная цена: 106.13 USDT\nУсловие срабатывания: ≥ +5%"
-				if request.Text != wantText {
-					t.Errorf("unexpected message: %q", request.Text)
+				const wantText = "🔔 <b>Уведомление</b>\n\n💵 Монета: <b>BTC/USDT (Binance)</b>\n\n📌 Цена при настройке уведомления: 100.00 USDT\n📈 Актуальная цена: <b>106.13 USDT</b>\n🎯 Условие срабатывания: <b>≥ +5%</b>"
+				if request.ParseMode != "HTML" || request.Text != wantText {
+					t.Errorf("unexpected message (%q): %q", request.ParseMode, request.Text)
 				}
 				mu.Lock()
 				attempts = append(attempts, request.ChatID)
