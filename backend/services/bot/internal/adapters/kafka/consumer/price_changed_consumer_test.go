@@ -52,7 +52,7 @@ func TestConsumeCommitsOnlyAfterWholeBatchIsDelivered(t *testing.T) {
 				if r.Method != http.MethodPost || r.URL.Path != "/bottest-token/sendMessage" {
 					t.Errorf("unexpected Telegram request: %s %s", r.Method, r.URL.Path)
 				}
-				const wantText = "🔔 <b>Уведомление</b>\n\n💵 Монета: <b>BTC/USDT (Binance &amp; Co)</b>\n\n📌 Цена при настройке уведомления: 100.00 USDT\n📈 Актуальная цена: <b>106.13 USDT</b>\n🎯 Условие срабатывания: <b>≥ +5%</b>"
+				const wantText = "🔔 <b>Уведомление</b>\n\n💵 Монета: <b>BTC/USDT (Binance)</b>\n\n📌 Цена при настройке уведомления: 100.00 USDT\n📈 Актуальная цена: <b>106.13 USDT</b>\n🎯 Условие срабатывания: <b>≥ +5%</b>"
 				if request.ParseMode != "HTML" || request.Text != wantText {
 					t.Errorf("unexpected message (%q): %q", request.ParseMode, request.Text)
 				}
