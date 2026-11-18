@@ -13,6 +13,7 @@ import (
 	"marketmind/api/internal/utils/httpresponse"
 	"marketmind/api/internal/utils/requestctx"
 	"marketmind/api/internal/utils/requestparams"
+	"marketmind/utils/priceformat"
 )
 
 type AlertWriter interface {
@@ -64,8 +65,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		items = append(items, alertResponse{
 			ID: alert.ID, Type: alert.Type, Value: alert.Value,
 			Direction:      alert.Direction,
-			ReferencePrice: alert.ReferencePrice, TargetPrice: alert.TargetPrice,
-			IsActive: alert.IsActive, QuoteAsset: quoteAsset,
+			ReferencePrice: priceformat.TwoDecimals(alert.ReferencePrice),
+			TargetPrice:    priceformat.TwoDecimals(alert.TargetPrice),
+			IsActive:       alert.IsActive, QuoteAsset: quoteAsset,
 		})
 	}
 	httpresponse.WriteJSON(w, http.StatusOK, struct {

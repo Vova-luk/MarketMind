@@ -4,7 +4,7 @@ import Header from './components/Header';
 import CoinCard from './components/CoinCard';
 import SearchSheet from './components/SearchSheet';
 import CoinSheet from './components/CoinSheet';
-import { initTelegram, triggerHaptic } from './utils/telegram';
+import { initTelegram, getTelegramUser, triggerHaptic } from './utils/telegram';
 import {
   initAppData,
   addSubscriptionApi,
@@ -20,36 +20,33 @@ export default function App() {
   const [exchanges, setExchanges] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [initError, setInitError] = useState('');
 
-  const [activeSheet, setActiveSheet] = useState(null); 
+  const [activeSheet, setActiveSheet] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
-
   const [subToDelete, setSubToDelete] = useState(null);
-
-  const handleConfirmDeleteSubscription = async () => {
-    if (!subToDelete) return;
-    triggerHaptic('medium');
-
-    const idToRemove = subToDelete.subscription_id;
-    setSubscriptions((prev) =>
-      prev.filter((s) => s.subscription_id !== idToRemove)
-    );
-    setSubToDelete(null);
-
-    try {
-      await deleteSubscriptionApi(idToRemove);
-    } catch (e) {}
-  };
 
   const loadInitial = async () => {
     setIsLoading(true);
-    const data = await initAppData();
-    if (data.user?.username) {
-      setUserName(data.user.username);
+    setInitError('');
+    const tgUser = getTelegramUser();
+    if (tgUser?.username) {
+      setUserName(tgUser.username);
     }
-    setExchanges(data.exchanges);
-    setSubscriptions(data.subscriptions);
-    setIsLoading(false);
+
+    try {
+      const data = await initAppData();
+      if (data.user?.username) {
+        setUserName(data.user.username);
+      }
+      setExchanges(data.exchanges);
+      setSubscriptions(data.subscriptions);
+    } catch (e) {
+      console.error('Ошибка инициализации:', e);
+      setInitError('Не удалось подключиться к серверу');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -57,7 +54,22 @@ export default function App() {
     loadInitial();
   }, []);
 
-  //карточка монеты
+  const updateSubscriptionAlerts = (subscriptionId, updateFn) => {
+    setSelectedDetail((prev) => {
+      if (!prev || prev.subscription_id !== subscriptionId) return prev;
+      return { ...prev, alerts: updateFn(prev.alerts || []) };
+    });
+
+    setSubscriptions((prev) =>
+      prev.map((sub) =>
+        sub.subscription_id === subscriptionId
+          ? { ...sub, alerts: updateFn(sub.alerts || []) }
+          : sub
+      )
+    );
+  };
+
+  // Карточка монеты
   const handleOpenSubscription = async (subscriptionId) => {
     triggerHaptic('light');
     const baseSub = subscriptions.find(
@@ -69,38 +81,58 @@ export default function App() {
     try {
       const detail = await getSubscriptionDetailApi(subscriptionId);
       setSelectedDetail(detail);
+      setSubscriptions((prev) =>
+        prev.map((sub) =>
+          sub.subscription_id === subscriptionId
+            ? { ...sub, alerts: detail.alerts || [] }
+            : sub
+        )
+      );
     } catch (e) {
+      console.error('Ошибка загрузки деталей подписки:', e);
     }
   };
 
-  //добавить-удалить подписку
+  // Подтверждение удаления подписки через модалку
+  const handleConfirmDeleteSubscription = async () => {
+    if (!subToDelete) return;
+    triggerHaptic('medium');
+
+    const idToRemove = subToDelete.subscription_id;
+    try {
+      await deleteSubscriptionApi(idToRemove);
+      setSubscriptions((prev) =>
+        prev.filter((s) => s.subscription_id !== idToRemove)
+      );
+    } catch (e) {
+      console.error('Ошибка удаления подписки:', e);
+    } finally {
+      setSubToDelete(null);
+    }
+  };
+
+  // Добавить / удалить подписку
   const handleToggleSubscription = async (market, existingSub) => {
     triggerHaptic('light');
 
     if (existingSub) {
-      //удалить
       setSubToDelete(existingSub);
     } else {
-      // добавить
       try {
         const created = await addSubscriptionApi(market);
-        setSubscriptions((prev) => [...prev, created]);
+        setSubscriptions((prev) => {
+          const exists = prev.some(
+            (s) => s.subscription_id === created.subscription_id
+          );
+          return exists ? prev : [...prev, created];
+        });
       } catch (e) {
-        const exchangeObj = exchanges.find((ex) => ex.id === market.exchange_id);
-        const mockSub = {
-          subscription_id: String(Date.now()),
-          exchange_name: exchangeObj?.name || 'Binance',
-          base_asset: market.base_asset,
-          quote_asset: market.quote_asset,
-          price: market.price,
-          alerts: [],
-        };
-        setSubscriptions((prev) => [...prev, mockSub]);
+        console.error('Ошибка добавления подписки:', e);
       }
     }
   };
 
-  //создание алерта
+  // Создание уведомления
   const handleAddAlert = async (alertPayload) => {
     if (!selectedDetail) return;
     triggerHaptic('medium');
@@ -108,67 +140,42 @@ export default function App() {
 
     try {
       const createdAlert = await createAlertApi(subId, alertPayload);
-      setSelectedDetail((prev) => ({
-        ...prev,
-        alerts: [...(prev.alerts || []), createdAlert],
-      }));
+      updateSubscriptionAlerts(subId, (alerts) => [...alerts, createdAlert]);
     } catch (e) {
-      const refPrice = Number(selectedDetail.price || 0);
-      const targetPrice =
-        alertPayload.type === 'price'
-          ? alertPayload.value
-          : String(
-              Math.round(refPrice * (1 + Number(alertPayload.value) / 100) * 100) / 100
-            );
-
-      const mockAlert = {
-        alert_id: String(Date.now()),
-        type: alertPayload.type,
-        value: alertPayload.value,
-        condition: alertPayload.condition,
-        reference_price: String(refPrice),
-        target_price: targetPrice,
-        is_active: true,
-      };
-      setSelectedDetail((prev) => ({
-        ...prev,
-        alerts: [...(prev.alerts || []), mockAlert],
-      }));
+      console.error('Ошибка создания уведомления:', e);
     }
   };
 
-  //уведомление о включении-выключении алерта
+  // Включение / выключение уведомления
   const handleToggleAlert = async (alertId, nextActive) => {
     if (!selectedDetail) return;
     triggerHaptic('light');
     const subId = selectedDetail.subscription_id;
 
-    setSelectedDetail((prev) => ({
-      ...prev,
-      alerts: prev.alerts.map((a) =>
-        a.alert_id === alertId ? { ...a, is_active: nextActive } : a
-      ),
-    }));
-
     try {
-      await toggleAlertApi(subId, alertId, nextActive);
-    } catch (e) {}
+      const updated = await toggleAlertApi(subId, alertId, nextActive);
+      updateSubscriptionAlerts(subId, (alerts) =>
+        alerts.map((a) => (a.alert_id === alertId ? updated : a))
+      );
+    } catch (e) {
+      console.error('Ошибка переключения уведомления:', e);
+    }
   };
 
-  //удалениеалерта
+  // Удаление уведомления
   const handleDeleteAlert = async (alertId) => {
     if (!selectedDetail) return;
     triggerHaptic('medium');
     const subId = selectedDetail.subscription_id;
 
-    setSelectedDetail((prev) => ({
-      ...prev,
-      alerts: prev.alerts.filter((a) => a.alert_id !== alertId),
-    }));
-
     try {
       await deleteAlertApi(subId, alertId);
-    } catch (e) {}
+      updateSubscriptionAlerts(subId, (alerts) =>
+        alerts.filter((a) => a.alert_id !== alertId)
+      );
+    } catch (e) {
+      console.error('Ошибка удаления уведомления:', e);
+    }
   };
 
   return (
@@ -177,7 +184,9 @@ export default function App() {
 
       <main
         className={`flex-1 p-4 space-y-3 transition-all duration-200 ${
-          activeSheet ? 'blur-xs pointer-events-none select-none opacity-60' : ''
+          activeSheet || subToDelete
+            ? 'blur-xs pointer-events-none select-none opacity-60'
+            : ''
         }`}
       >
         {isLoading ? (
@@ -187,6 +196,10 @@ export default function App() {
               className="h-16 bg-gray-100 animate-pulse rounded-2xl"
             />
           ))
+        ) : initError ? (
+          <div className="text-center py-20 text-red-500 text-sm">
+            {initError}
+          </div>
         ) : subscriptions.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-sm">
             Список отслеживания пуст. Нажмите «+», чтобы добавить рынок.
@@ -204,10 +217,9 @@ export default function App() {
             />
           ))
         )}
-        
       </main>
 
-      {!activeSheet && (
+      {!activeSheet && !subToDelete && (
         <button
           onClick={() => {
             triggerHaptic('medium');
@@ -254,6 +266,7 @@ export default function App() {
           </div>
         </div>
       )}
+
       {/* Модальное окно подтверждения удаления подписки */}
       {subToDelete && (
         <div
@@ -262,31 +275,30 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bg-white rounded-2xl p-5 shadow-xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-xs bg-white rounded-2xl p-5 shadow-xl space-y-4 text-center"
           >
             <h3 className="text-base font-medium text-black">
-              Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
+              Удалить {subToDelete.base_asset}/{subToDelete.quote_asset} (
               {subToDelete.exchange_name})?
             </h3>
-            {/* {<p className="text-xs text-gray-500 leading-relaxed">
-              Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
-              {subToDelete.exchange_name})?
-            </p>} */}
-           
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Рынок будет удален из отслеживаемого вместе со всеми настроенными
+              для него уведомлениями.
+            </p>
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <button
                 type="button"
                 onClick={() => setSubToDelete(null)}
                 className="py-2 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 cursor-pointer transition-colors"
               >
-                не
+                Отмена
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteSubscription}
                 className="py-2 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white cursor-pointer transition-colors"
               >
-                газ
+                Удалить
               </button>
             </div>
           </div>
