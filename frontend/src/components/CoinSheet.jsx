@@ -11,7 +11,7 @@ export default function CoinSheet({
   const [targetPercentInput, setTargetPercentInput] = useState('');
   const [inputError, setInputError] = useState('');
 
-  const currentPrice = Number(detail.price || 0);
+  const currentPrice = Number(detail.price_exact ?? detail.price ?? 0);
 
   const handlePriceSubmit = () => {
     const raw = targetPriceInput.trim().replace(',', '.');
