@@ -57,3 +57,29 @@ jobs:
 
       - name: Run Go tests
         run: go test -race -count=1 ./...
+      
+      - name: Prepare Compose environment
+        working-directory: backend
+        run: cp .env.example .env
+
+      - name: Start backend services
+        working-directory: backend
+        env:
+          MARKETMIND_DEPLOY__POSTGRES_PORT: "5433"
+          BOT_TOKEN: "123456:ci-placeholder"
+          MARKETMIND_TELEGRAM__BOT_TOKEN: "123456:ci-placeholder"
+        run: docker compose --env-file .env -f deploy/compose.yaml --profile notifications up --build -d --wait --wait-timeout 180
+
+      - name: Check API health
+        working-directory: backend
+        run: curl --fail --show-error http://127.0.0.1:8080/health
+
+      - name: Print service logs
+        if: failure()
+        working-directory: backend
+        run: docker compose --env-file .env -f deploy/compose.yaml --profile notifications logs --tail=100
+
+      - name: Stop backend services
+        if: always()
+        working-directory: backend
+        run: docker compose --env-file .env -f deploy/compose.yaml --profile notifications down --volumes --remove-orphans
