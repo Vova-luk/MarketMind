@@ -1,0 +1,7 @@
+name: marketmind-integration
+
+include:
+  - path:
+      - compose.yaml
+      - compose.integration.override.yaml
+    env_file: integration.env
