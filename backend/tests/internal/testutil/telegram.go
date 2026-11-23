@@ -22,14 +22,10 @@ type RegisteredUser struct {
 // RegisterUser creates a Telegram user through the API and schedules its cleanup.
 func (e Environment) RegisterUser(t testing.TB, ctx context.Context) RegisteredUser {
 	t.Helper()
-	randomID, err := rand.Int(rand.Reader, big.NewInt(1<<52))
-	if err != nil {
-		t.Fatalf("generate Telegram user ID: %v", err)
-	}
-	user := RegisteredUser{TelegramID: randomID.Int64() + 1, API: e.api}
+	user := RegisteredUser{TelegramID: NewTelegramID(t), API: e.api}
 
 	var exists bool
-	err = e.DB.QueryRow(ctx, `
+	err := e.DB.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM market_mind.users WHERE telegram_user_id = $1)
 	`, user.TelegramID).Scan(&exists)
 	if err != nil {
@@ -55,6 +51,15 @@ func (e Environment) RegisterUser(t testing.TB, ctx context.Context) RegisteredU
 		t.Fatalf("registered Telegram user ID: got %d, want %d", response.TelegramID, user.TelegramID)
 	}
 	return user
+}
+
+func NewTelegramID(t testing.TB) int64 {
+	t.Helper()
+	id, err := rand.Int(rand.Reader, big.NewInt(1<<52))
+	if err != nil {
+		t.Fatalf("generate Telegram user ID: %v", err)
+	}
+	return id.Int64() + 1
 }
 
 func signedTelegramHeader(botToken string, telegramUserID int64) string {

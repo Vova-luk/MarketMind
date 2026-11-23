@@ -22,7 +22,8 @@ curl -i http://localhost:8080/health
 ```
 
 Compose запускает PostgreSQL, Kafka, Kafka UI, API, Exchange Data, Tracking и Bot.
-Tracking ждёт завершения миграций API и создания топика `Price-Checked-Topic`.
+Tracking ждёт завершения миграций API и создания топиков `Price-Checked-Topic`
+и `Price-Changed-Topic`.
 Для запуска без токена выполните ту же команду `up` без `--profile notifications`.
 Конфиги API и Exchange Data монтируются только для чтения. Логи по умолчанию
 пишутся в stdout.
@@ -79,10 +80,10 @@ EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
 docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml up --build --wait --wait-timeout 180
 ```
 
-Compose поднимает API, Exchange Data, Tracking, Bot, PostgreSQL и Kafka.
-API доступен на `127.0.0.1:18080`, PostgreSQL — на `127.0.0.1:15432`.
-Настройки подключения и тестовый токен заданы в `deploy/integration.env`.
-Стек использует те же порты Kafka, что и обычный Compose, поэтому запускайте их по очереди.
+Compose поднимает API, Exchange Data, Tracking, Bot, PostgreSQL, Kafka и два
+HTTP-стаба из `tests/stubs`. Планировщик Exchange Data получает тестовую котировку
+от Bybit-стаба, а Bot отправляет запросы `sendMessage` в Telegram-стаб.
+Тестовые адреса на хосте и токен заданы в `deploy/integration.env`.
 
 Запустите тесты отдельно из `backend/tests`:
 
@@ -157,9 +158,9 @@ Kafka UI доступен на <http://localhost:8081>. В кластере `Mar
 
 `Price-Checked-Topic` передаёт цены от Exchange-Data-Service в Tracking-Service,
 а `Price-Changed-Topic` — события от Tracking-Service в Bot-Service.
-При полном запуске бэкенда Compose создаёт `Price-Checked-Topic` с тремя
-партициями и двумя репликами до запуска Tracking. Для остальных топиков
-доступно автоматическое создание с теми же параметрами.
+При полном запуске бэкенда Compose создаёт оба топика с тремя партициями и
+двумя репликами до запуска Tracking. Для остальных топиков доступно
+автоматическое создание с теми же параметрами.
 
 Команды для проверки списка топиков и реплик.
 

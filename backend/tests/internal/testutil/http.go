@@ -6,13 +6,22 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 )
 
 type Client struct {
 	baseURL       string
 	httpClient    *http.Client
 	authorization string
+}
+
+func NewClient(baseURL string) Client {
+	return Client{
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 // RequestJSON sends a request, checks its status and optionally decodes its response.
