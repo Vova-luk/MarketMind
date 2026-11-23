@@ -8,3 +8,7 @@ server:
 scheduler:
   interval: 1s
   exchanges: [bybit]
+
+exchanges:
+  bybit:
+    request_timeout: 750ms

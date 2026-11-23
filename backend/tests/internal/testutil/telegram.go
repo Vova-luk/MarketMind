@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type RegisteredUser struct {
@@ -49,10 +51,17 @@ func (e Environment) RegisterUser(t testing.TB, ctx context.Context) RegisteredU
 	if exists {
 		t.Fatalf("Telegram test user ID %d already exists", user.TelegramID)
 	}
+	dbConfig := e.DB.Config()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if _, err := e.DB.Exec(ctx, "DELETE FROM market_mind.users WHERE telegram_user_id = $1", user.TelegramID); err != nil {
+		db, err := pgx.ConnectConfig(ctx, dbConfig)
+		if err != nil {
+			t.Errorf("connect to delete test user: %v", err)
+			return
+		}
+		defer db.Close(ctx)
+		if _, err := db.Exec(ctx, "DELETE FROM market_mind.users WHERE telegram_user_id = $1", user.TelegramID); err != nil {
 			t.Errorf("delete test user: %v", err)
 		}
 	})

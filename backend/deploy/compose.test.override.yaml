@@ -27,6 +27,11 @@ services:
     depends_on:
       bybit-stub:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8184/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
 
   tracking:
     healthcheck:

@@ -12,3 +12,4 @@ jobs:
     uses: ./.github/workflows/ci.yaml
     with:
       run-e2e: true
+      run-nonfunctional: true

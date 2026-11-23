@@ -7,6 +7,14 @@ on:
         description: Run the end-to-end suite on the shared test stack
         type: boolean
         default: false
+      run-nonfunctional:
+        description: Run the nonfunctional suite on the shared test stack
+        type: boolean
+        default: false
+      extended-nonfunctional:
+        description: Use the weekly load profile and check PostgreSQL restart
+        type: boolean
+        default: false
 
   pull_request:
     branches:
@@ -104,6 +112,17 @@ jobs:
           source ../deploy/test.env
           set +a
           go test -race -tags=e2e -count=1 -v ./end-to-end/...
+
+      - name: Run backend nonfunctional tests
+        if: ${{ !cancelled() && steps.test-stack.outcome == 'success' && inputs.run-nonfunctional }}
+        working-directory: backend/tests
+        env:
+          TEST_NF_EXTENDED: ${{ inputs.extended-nonfunctional }}
+        run: |
+          set -a
+          source ../deploy/test.env
+          set +a
+          go test -race -tags=nonfunctional -count=1 -v ./nonfunctional/...
 
       - name: Print test service logs
         if: failure()
