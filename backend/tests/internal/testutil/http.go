@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,15 @@ func NewClient(baseURL string) Client {
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+func ClientFromEnv(t testing.TB, name string) Client {
+	t.Helper()
+	url := os.Getenv(name)
+	if url == "" {
+		t.Fatalf("%s must point to the test HTTP endpoint", name)
+	}
+	return NewClient(url)
 }
 
 // RequestJSON sends a request, checks its status and optionally decodes its response.

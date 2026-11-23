@@ -21,7 +21,7 @@ import (
 // notifications before saving the price, so the Kafka output can then be read to its end.
 func applyQuote(t testing.TB, ctx context.Context, kafka *testutil.Kafka, db *pgx.Conn, market marketFixture, price string) string {
 	t.Helper()
-	_, previous := marketPrice(t, ctx, db, market.ID)
+	_, previous := testutil.MarketPrice(t, ctx, db, market.ID)
 	receivedAt := time.Now().UTC().Truncate(time.Microsecond)
 	if !receivedAt.After(previous) {
 		receivedAt = previous.Add(time.Microsecond)
@@ -36,22 +36,10 @@ func applyQuote(t testing.TB, ctx context.Context, kafka *testutil.Kafka, db *pg
 		}},
 	})
 	testutil.Eventually(t, ctx, fmt.Sprintf("market %d to store quote %s from event %s", market.ID, price, eventID), func() bool {
-		stored, updatedAt := marketPrice(t, ctx, db, market.ID)
+		stored, updatedAt := testutil.MarketPrice(t, ctx, db, market.ID)
 		return stored == price && updatedAt.Equal(receivedAt)
 	})
 	return eventID
-}
-
-func marketPrice(t testing.TB, ctx context.Context, db *pgx.Conn, marketID int64) (string, time.Time) {
-	t.Helper()
-	var price string
-	var updatedAt time.Time
-	if err := db.QueryRow(ctx, `
-		SELECT price::text, updated_at FROM market_mind.markets WHERE id = $1
-	`, marketID).Scan(&price, &updatedAt); err != nil {
-		t.Fatalf("read market %d price: %v", marketID, err)
-	}
-	return price, updatedAt
 }
 
 func userNotifications(batch []events.PriceChangedEvent, userID, alertID int64) []events.PriceNotification {

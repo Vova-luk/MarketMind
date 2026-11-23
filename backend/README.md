@@ -71,36 +71,42 @@ EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
 
 Для периодического опроса запустите Kafka и Exchange Data с включённым планировщиком. Kafka создаст `Price-Checked-Topic` при первом обращении. [Настройки планировщика](services/exchange-data/README.md#настройки-планировщика)
 
-## Интеграционные тесты
+## Интеграционные и сквозные тесты
 
 Нужны Go версии из `tests/go.mod` и Docker Compose 2.24.4 или новее.
+Локально запускайте обычный и тестовый стеки по очереди. Перед переключением
+выполните `docker compose down` для текущего стека, чтобы освободить имена
+контейнеров и порты Kafka.
+
 Из каталога `backend` поднимите тестовый стек:
 
 ```bash
-docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml up --build --wait --wait-timeout 180
+docker compose --env-file deploy/test.env -f deploy/compose.test.yaml up --build --wait --wait-timeout 180
 ```
 
 Compose поднимает API, Exchange Data, Tracking, Bot, PostgreSQL, Kafka и два
 HTTP-стаба из `tests/stubs`. Планировщик Exchange Data получает тестовую котировку
 от Bybit-стаба, а Bot отправляет запросы `sendMessage` в Telegram-стаб.
-Тестовые адреса на хосте и токен заданы в `deploy/integration.env`.
+Тестовые адреса на хосте и токен заданы в `deploy/test.env`.
 
 Запустите тесты отдельно из `backend/tests`:
 
 ```bash
 set -a
-source ../deploy/integration.env
+source ../deploy/test.env
 set +a
 go test -race -tags=integration -count=1 -v ./...
+go test -race -tags=e2e -count=1 -v ./end-to-end/...
 ```
 
 После прогона остановите стек из `backend`:
 
 ```bash
-docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml down --volumes
+docker compose --env-file deploy/test.env -f deploy/compose.test.yaml down --volumes
 ```
 
-GitHub Actions запускает тот же тестовый стек и затем выполняет команду Go.
+При push и pull request GitHub Actions запускает тесты сервисов и интеграционные
+тесты. Ежедневный workflow в 00:30 UTC также запускает E2E-тесты на том же стеке.
 
 ## Служебный gRPC-метод API
 

@@ -6,8 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -21,11 +19,7 @@ func TestIT09_TelegramNotification(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 
-	stubURL := os.Getenv("TEST_TELEGRAM_STUB_URL")
-	if stubURL == "" {
-		t.Fatal("TEST_TELEGRAM_STUB_URL must point to the Telegram stub")
-	}
-	stub := testutil.NewClient(stubURL)
+	stub := testutil.ClientFromEnv(t, "TEST_TELEGRAM_STUB_URL")
 	kafka := testutil.NewKafka(t)
 	chatID := testutil.NewTelegramID(t)
 	eventID := rand.Text()
@@ -40,20 +34,13 @@ func TestIT09_TelegramNotification(t *testing.T) {
 		}},
 	})
 
-	var inbox struct {
-		Messages []struct {
-			ChatID    int64  `json:"chat_id"`
-			Text      string `json:"text"`
-			ParseMode string `json:"parse_mode"`
-		} `json:"messages"`
-	}
-	path := fmt.Sprintf("/messages/%d", chatID)
+	var messages []testutil.TelegramMessage
 	testutil.Eventually(t, ctx, fmt.Sprintf("Telegram sendMessage for chat %d", chatID), func() bool {
-		stub.RequestJSON(t, ctx, http.MethodGet, path, nil, http.StatusOK, &inbox)
-		return len(inbox.Messages) > 0
+		messages = testutil.TelegramMessages(t, ctx, stub, chatID)
+		return len(messages) > 0
 	})
 
-	message := inbox.Messages[0]
+	message := messages[0]
 	if message.ChatID != chatID || message.ParseMode != "HTML" {
 		t.Fatalf("sendMessage: got chat_id=%d, parse_mode=%q, want chat_id=%d, parse_mode=HTML",
 			message.ChatID, message.ParseMode, chatID)

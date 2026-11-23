@@ -1,6 +1,13 @@
 name: MarketMind CI
 
 on:
+  workflow_call:
+    inputs:
+      run-e2e:
+        description: Run the end-to-end suite on the shared test stack
+        type: boolean
+        default: false
+
   pull_request:
     branches:
       - main
@@ -77,21 +84,31 @@ jobs:
           go-version-file: backend/tests/go.mod
           cache-dependency-path: backend/tests/go.sum
 
-      - name: Start integration services
-        run: docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml up --build --wait --wait-timeout 180
+      - name: Start test services
+        id: test-stack
+        run: docker compose --env-file deploy/test.env -f deploy/compose.test.yaml up --build --wait --wait-timeout 180
 
       - name: Run backend integration tests
         working-directory: backend/tests
         run: |
           set -a
-          source ../deploy/integration.env
+          source ../deploy/test.env
           set +a
           go test -race -tags=integration -count=1 -v ./...
 
-      - name: Print integration service logs
-        if: failure()
-        run: docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml logs --tail=100
+      - name: Run backend end-to-end tests
+        if: ${{ !cancelled() && steps.test-stack.outcome == 'success' && inputs.run-e2e }}
+        working-directory: backend/tests
+        run: |
+          set -a
+          source ../deploy/test.env
+          set +a
+          go test -race -tags=e2e -count=1 -v ./end-to-end/...
 
-      - name: Stop integration services
+      - name: Print test service logs
+        if: failure()
+        run: docker compose --env-file deploy/test.env -f deploy/compose.test.yaml logs --tail=100
+
+      - name: Stop test services
         if: always()
-        run: docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml down --volumes
+        run: docker compose --env-file deploy/test.env -f deploy/compose.test.yaml down --volumes

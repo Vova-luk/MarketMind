@@ -18,7 +18,7 @@ func main() {
 	})
 	switch os.Args[1] {
 	case "bybit":
-		mux.HandleFunc("GET /v5/market/tickers", serveBybitTickers)
+		registerBybit(mux)
 	case "telegram":
 		token := os.Getenv("BOT_TOKEN")
 		if token == "" {

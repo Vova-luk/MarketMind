@@ -19,6 +19,21 @@ type RegisteredUser struct {
 	API        Client
 }
 
+type TelegramMessage struct {
+	ChatID    int64  `json:"chat_id"`
+	Text      string `json:"text"`
+	ParseMode string `json:"parse_mode"`
+}
+
+func TelegramMessages(t testing.TB, ctx context.Context, stub Client, chatID int64) []TelegramMessage {
+	t.Helper()
+	var inbox struct {
+		Messages []TelegramMessage `json:"messages"`
+	}
+	stub.RequestJSON(t, ctx, http.MethodGet, "/messages/"+strconv.FormatInt(chatID, 10), nil, http.StatusOK, &inbox)
+	return inbox.Messages
+}
+
 // RegisterUser creates a Telegram user through the API and schedules its cleanup.
 func (e Environment) RegisterUser(t testing.TB, ctx context.Context) RegisteredUser {
 	t.Helper()
