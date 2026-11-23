@@ -70,6 +70,37 @@ EXCHANGE_DATA_SCHEDULER_DISABLED=true go run ./exchange-data/cmd/exchange-data
 
 Для периодического опроса запустите Kafka и Exchange Data с включённым планировщиком. Kafka создаст `Price-Checked-Topic` при первом обращении. [Настройки планировщика](services/exchange-data/README.md#настройки-планировщика)
 
+## Интеграционные тесты
+
+Нужны Go версии из `tests/go.mod` и Docker Compose 2.24.4 или новее.
+Из каталога `backend` поднимите тестовый стек:
+
+```bash
+docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml up --build --wait --wait-timeout 180
+```
+
+Compose поднимает API, Exchange Data, Tracking, Bot, PostgreSQL и Kafka.
+API доступен на `127.0.0.1:18080`, PostgreSQL — на `127.0.0.1:15432`.
+Настройки подключения и тестовый токен заданы в `deploy/integration.env`.
+Стек использует те же порты Kafka, что и обычный Compose, поэтому запускайте их по очереди.
+
+Запустите тесты отдельно из `backend/tests`:
+
+```bash
+set -a
+source ../deploy/integration.env
+set +a
+go test -race -tags=integration -count=1 -v ./...
+```
+
+После прогона остановите стек из `backend`:
+
+```bash
+docker compose --env-file deploy/integration.env -f deploy/compose.integration.yaml down --volumes
+```
+
+GitHub Actions запускает тот же тестовый стек и затем выполняет команду Go.
+
 ## Служебный gRPC-метод API
 
 `GetMarketsToCheck` возвращает рынки активных бирж с хотя бы одной подпиской,

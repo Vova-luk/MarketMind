@@ -1,0 +1,21 @@
+services:
+  api:
+    env_file: !reset []
+    environment:
+      MARKETMIND_TELEGRAM__BOT_TOKEN: ${MARKETMIND_TELEGRAM__BOT_TOKEN:?Set the integration bot token}
+    ports: !override
+      - "127.0.0.1:${MARKETMIND_SERVER__PORT}:8080"
+    healthcheck:
+      interval: 2s
+
+  exchange-data:
+    environment:
+      EXCHANGE_DATA_SCHEDULER_DISABLED: "true"
+
+  tracking:
+    healthcheck:
+      interval: 2s
+
+  bot:
+    healthcheck:
+      interval: 2s
