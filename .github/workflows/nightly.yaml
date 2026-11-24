@@ -2,6 +2,7 @@ name: MarketMind nightly tests
 
 on:
   schedule:
+    # 03:30 Europe/Volgograd (UTC+3).
     - cron: '30 0 * * *'
 
 permissions:
@@ -11,5 +12,6 @@ jobs:
   backend:
     uses: ./.github/workflows/ci.yaml
     with:
+      full-regression: true
       run-e2e: true
       run-nonfunctional: true

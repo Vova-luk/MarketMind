@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration || smoke
 
 package integration
 
@@ -81,13 +81,6 @@ func seedMarket(t testing.TB, ctx context.Context, db *pgx.Conn, market marketFi
 		})
 	}
 	return market
-}
-
-type subscriptionResponse struct {
-	ID           int64  `json:"subscription_id,string"`
-	BaseAsset    string `json:"base_asset"`
-	QuoteAsset   string `json:"quote_asset"`
-	ExchangeName string `json:"exchange_name"`
 }
 
 func addSubscription(t testing.TB, ctx context.Context, user testutil.RegisteredUser, market marketFixture) subscriptionResponse {
