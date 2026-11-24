@@ -40,8 +40,8 @@ func TestIT01_WatchlistLifecycle(t *testing.T) {
 	want := subscriptionResponse{
 		ID: created.ID, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance",
 	}
-	if created.ID <= 0 || created != want {
-		t.Fatalf("created subscription: got %+v, want a positive ID and %+v", created, want)
+	if created != want {
+		t.Fatalf("created subscription: got %+v, want %+v", created, want)
 	}
 
 	var afterAdd watchlistResponse

@@ -1,0 +1,14 @@
+server:
+  host: "0.0.0.0"
+  port: 8184
+  read_timeout: 5s
+  write_timeout: 10s
+  shutdown_timeout: 10s
+
+scheduler:
+  interval: 1s
+  exchanges: [bybit]
+
+exchanges:
+  bybit:
+    request_timeout: 750ms

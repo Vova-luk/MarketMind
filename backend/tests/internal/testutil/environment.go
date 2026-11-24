@@ -2,9 +2,7 @@ package testutil
 
 import (
 	"context"
-	"net/http"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +26,7 @@ func New(t testing.TB, ctx context.Context) Environment {
 	if dsn == "" {
 		t.Fatal("TEST_DATABASE_URL must point to the isolated database used by the test API")
 	}
-	baseURL := strings.TrimRight(os.Getenv("TEST_API_URL"), "/")
+	baseURL := os.Getenv("TEST_API_URL")
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:8080"
 	}
@@ -46,7 +44,7 @@ func New(t testing.TB, ctx context.Context) Environment {
 	})
 	return Environment{
 		DB:       db,
-		api:      Client{baseURL: baseURL, httpClient: &http.Client{Timeout: 10 * time.Second}},
+		api:      NewClient(baseURL),
 		botToken: botToken,
 	}
 }
