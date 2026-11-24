@@ -27,7 +27,7 @@ func (r *Repository) BeginSubscription(ctx context.Context, telegramUserID, subs
 	}
 	transaction := subscriptionTx{tx: tx, subscriptionID: subscriptionID}
 	var subscription domain.Subscription
-	// Lock the user for the per-user limit and the subscription against cascade deletion.
+	// Lock the user for the per-user limit and the subscription for its own limit and against cascade deletion.
 	err = tx.QueryRow(ctx, `
 		SELECT u.id, m.price::text, m.quote_asset, e.is_active
 		FROM market_mind.users AS u
@@ -134,6 +134,17 @@ func (w subscriptionTx) CountActive(ctx context.Context) (int, error) {
 	`, w.userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count user's active alerts: %w", err)
+	}
+	return count, nil
+}
+
+func (w subscriptionTx) CountForSubscription(ctx context.Context) (int, error) {
+	var count int
+	err := w.tx.QueryRow(ctx, `
+		SELECT count(*) FROM market_mind.alerts WHERE subscription_id = $1
+	`, w.subscriptionID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count alerts for subscription: %w", err)
 	}
 	return count, nil
 }

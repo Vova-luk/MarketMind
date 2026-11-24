@@ -6,7 +6,7 @@ import (
 	domain "marketmind/api/internal/domain/subscriptions"
 )
 
-const defaultSubscriptionLimit = 50
+const defaultSubscriptionLimit = 10
 
 type Service struct {
 	repository domain.AddRepository
