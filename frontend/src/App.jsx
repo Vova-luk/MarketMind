@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, X, AlertCircle } from 'lucide-react';
 import Header from './components/Header';
 import CoinCard from './components/CoinCard';
 import SearchSheet from './components/SearchSheet';
@@ -15,16 +15,39 @@ import {
   deleteAlertApi,
 } from './api/marketApi';
 
+const MAX_SUBSCRIPTIONS = 10;
+const MAX_ALERTS_PER_SUBSCRIPTION = 10;
+
 export default function App() {
   const [userName, setUserName] = useState('Пользователь');
   const [exchanges, setExchanges] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [serverError, setServerError] = useState(false);
 
-  const [activeSheet, setActiveSheet] = useState(null); 
+  const [activeSheet, setActiveSheet] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
 
   const [subToDelete, setSubToDelete] = useState(null);
+
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef(null);
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage('');
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const handleConfirmDeleteSubscription = async () => {
     if (!subToDelete) return;
@@ -43,13 +66,19 @@ export default function App() {
 
   const loadInitial = async () => {
     setIsLoading(true);
-    const data = await initAppData();
-    if (data.user?.username) {
-      setUserName(data.user.username);
+    setServerError(false);
+    try {
+      const data = await initAppData();
+      if (data.user?.username) {
+        setUserName(data.user.username);
+      }
+      setExchanges(data.exchanges);
+      setSubscriptions(data.subscriptions);
+    } catch (e) {
+      setServerError(true);
+    } finally {
+      setIsLoading(false);
     }
-    setExchanges(data.exchanges);
-    setSubscriptions(data.subscriptions);
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -69,8 +98,7 @@ export default function App() {
     try {
       const detail = await getSubscriptionDetailApi(subscriptionId);
       setSelectedDetail(detail);
-    } catch (e) {
-    }
+    } catch (e) {}
   };
 
   //добавить-удалить подписку
@@ -81,28 +109,29 @@ export default function App() {
       //удалить
       setSubToDelete(existingSub);
     } else {
+      if (subscriptions.length >= MAX_SUBSCRIPTIONS) {
+        showToast(`Можно отслеживать не более ${MAX_SUBSCRIPTIONS} монет`);
+        return;
+      }
       // добавить
       try {
         const created = await addSubscriptionApi(market);
         setSubscriptions((prev) => [...prev, created]);
-      } catch (e) {
-        const exchangeObj = exchanges.find((ex) => ex.id === market.exchange_id);
-        const mockSub = {
-          subscription_id: String(Date.now()),
-          exchange_name: exchangeObj?.name || 'Binance',
-          base_asset: market.base_asset,
-          quote_asset: market.quote_asset,
-          price: market.price,
-          alerts: [],
-        };
-        setSubscriptions((prev) => [...prev, mockSub]);
-      }
+      } catch (e) {}
     }
   };
 
   //создание алерта
   const handleAddAlert = async (alertPayload) => {
     if (!selectedDetail) return;
+
+    if ((selectedDetail.alerts?.length || 0) >= MAX_ALERTS_PER_SUBSCRIPTION) {
+      showToast(
+        `Не более ${MAX_ALERTS_PER_SUBSCRIPTION} уведомлений для одной монеты`
+      );
+      return;
+    }
+
     triggerHaptic('medium');
     const subId = selectedDetail.subscription_id;
 
@@ -112,32 +141,10 @@ export default function App() {
         ...prev,
         alerts: [...(prev.alerts || []), createdAlert],
       }));
-    } catch (e) {
-      const refPrice = Number(selectedDetail.price || 0);
-      const targetPrice =
-        alertPayload.type === 'price'
-          ? alertPayload.value
-          : String(
-              Math.round(refPrice * (1 + Number(alertPayload.value) / 100) * 100) / 100
-            );
-
-      const mockAlert = {
-        alert_id: String(Date.now()),
-        type: alertPayload.type,
-        value: alertPayload.value,
-        condition: alertPayload.condition,
-        reference_price: String(refPrice),
-        target_price: targetPrice,
-        is_active: true,
-      };
-      setSelectedDetail((prev) => ({
-        ...prev,
-        alerts: [...(prev.alerts || []), mockAlert],
-      }));
-    }
+    } catch (e) {}
   };
 
-  //уведомление о включении-выключении алерта
+  //включение-выключение алерта
   const handleToggleAlert = async (alertId, nextActive) => {
     if (!selectedDetail) return;
     triggerHaptic('light');
@@ -155,7 +162,7 @@ export default function App() {
     } catch (e) {}
   };
 
-  //удалениеалерта
+  //удаление алерта
   const handleDeleteAlert = async (alertId) => {
     if (!selectedDetail) return;
     triggerHaptic('medium');
@@ -187,6 +194,10 @@ export default function App() {
               className="h-16 bg-gray-100 animate-pulse rounded-2xl"
             />
           ))
+        ) : serverError ? (
+          <div className="text-center py-20 text-red-500 text-sm">
+            Нет связи с сервером
+          </div>
         ) : subscriptions.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-sm">
             Список отслеживания пуст. Нажмите «+», чтобы добавить рынок.
@@ -204,7 +215,6 @@ export default function App() {
             />
           ))
         )}
-        
       </main>
 
       {!activeSheet && (
@@ -254,6 +264,7 @@ export default function App() {
           </div>
         </div>
       )}
+
       {/* Модальное окно подтверждения удаления подписки */}
       {subToDelete && (
         <div
@@ -268,11 +279,7 @@ export default function App() {
               Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
               {subToDelete.exchange_name})?
             </h3>
-            {/* {<p className="text-xs text-gray-500 leading-relaxed">
-              Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
-              {subToDelete.exchange_name})?
-            </p>} */}
-           
+
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <button
                 type="button"
@@ -289,6 +296,15 @@ export default function App() {
                 газ
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm">
+          <div className="flex items-center gap-2.5 bg-gray-900/95 text-white px-4 py-3 rounded-2xl shadow-lg text-sm">
+            <AlertCircle className="w-5 h-5 text-orange-400 shrink-0" />
+            <span className="flex-1">{toastMessage}</span>
           </div>
         </div>
       )}
