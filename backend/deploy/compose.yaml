@@ -20,14 +20,16 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        for attempt in 1 2 3 4 5; do
-          if /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker-1:19092,broker-2:19092 \
-            --create --if-not-exists --topic Price-Checked-Topic --partitions 3 --replication-factor 2; then
-            exit 0
-          fi
-          sleep 2
+        for topic in Price-Checked-Topic Price-Changed-Topic; do
+          for attempt in 1 2 3 4 5; do
+            if /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker-1:19092,broker-2:19092 \
+              --create --if-not-exists --topic "$$topic" --partitions 3 --replication-factor 2; then
+              break
+            fi
+            if [ "$$attempt" = 5 ]; then exit 1; fi
+            sleep 2
+          done
         done
-        exit 1
 
   api:
     build:

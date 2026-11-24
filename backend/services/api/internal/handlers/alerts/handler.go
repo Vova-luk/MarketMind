@@ -13,6 +13,7 @@ import (
 	"marketmind/api/internal/utils/httpresponse"
 	"marketmind/api/internal/utils/requestctx"
 	"marketmind/api/internal/utils/requestparams"
+	"marketmind/utils/priceformat"
 )
 
 type AlertWriter interface {
@@ -64,8 +65,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		items = append(items, alertResponse{
 			ID: alert.ID, Type: alert.Type, Value: alert.Value,
 			Direction:      alert.Direction,
-			ReferencePrice: alert.ReferencePrice, TargetPrice: alert.TargetPrice,
-			IsActive: alert.IsActive, QuoteAsset: quoteAsset,
+			ReferencePrice: priceformat.TwoDecimals(alert.ReferencePrice),
+			TargetPrice:    priceformat.TwoDecimals(alert.TargetPrice),
+			IsActive:       alert.IsActive, QuoteAsset: quoteAsset,
 		})
 	}
 	httpresponse.WriteJSON(w, http.StatusOK, struct {
@@ -159,6 +161,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		httpresponse.WriteError(w, http.StatusConflict, "EXCHANGE_INACTIVE", "Exchange is inactive")
 	case errors.Is(err, domain.ErrActiveLimit):
 		httpresponse.WriteError(w, http.StatusConflict, "ACTIVE_ALERT_LIMIT_REACHED", "Active alert limit reached")
+	case errors.Is(err, domain.ErrPerSubscriptionLimit):
+		httpresponse.WriteError(w, http.StatusConflict, "SUBSCRIPTION_ALERT_LIMIT_REACHED", "Alert limit for this subscription reached")
 	case errors.Is(err, domain.ErrQuoteMissing):
 		httpresponse.WriteError(w, http.StatusServiceUnavailable, "QUOTE_UNAVAILABLE", "Market price is unavailable")
 	default:

@@ -32,6 +32,7 @@ database:
 
 alerts:
   active_limit: 50
+  per_subscription_limit: 10
 
 subscriptions:
-  limit: 50
+  limit: 10

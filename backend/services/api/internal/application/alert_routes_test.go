@@ -66,6 +66,13 @@ func (s *alertStoreStub) CountActive(context.Context) (int, error) {
 	return 0, nil
 }
 
+func (s *alertStoreStub) CountForSubscription(context.Context) (int, error) {
+	if s.alert.ID != 0 {
+		return 1, nil
+	}
+	return 0, nil
+}
+
 func TestAlertMutationRoutes(t *testing.T) {
 	const botToken = "test-token"
 	const collection = "/api/v1/subscriptions/18/alerts"
@@ -75,7 +82,7 @@ func TestAlertMutationRoutes(t *testing.T) {
 		Price: "83781.00000000000001", QuoteAsset: "USDT", ExchangeActive: true,
 	}}
 	router := NewRouter(logger, botToken, userhandlers.NewHandler(registerUserStub(nil), logger), nil, nil,
-		alerthandlers.NewHandler(alertservice.NewService(store, 1), nil, logger), nil)
+		alerthandlers.NewHandler(alertservice.NewService(store, 1, 1), nil, logger), nil)
 	request := func(method, path, body string, userID int64, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -103,13 +110,16 @@ func TestAlertMutationRoutes(t *testing.T) {
 	}
 
 	const createBody = `{"type":"percent","value":"5","direction":"lte"}`
-	const firstTarget = "87970.0500000000000105"
+	const firstTarget = "87970.05"
 	res := request(http.MethodPost, collection, createBody, 123, http.StatusCreated)
 	assertDirection(res, firstTarget, alerts.LessOrEqual)
 	if res.Header().Get("Location") != resource {
 		t.Fatalf("unexpected Location: %q", res.Header().Get("Location"))
 	}
-	request(http.MethodPost, collection, createBody, 123, http.StatusConflict)
+	res = request(http.MethodPost, collection, createBody, 123, http.StatusConflict)
+	if !strings.Contains(res.Body.String(), `"ACTIVE_ALERT_LIMIT_REACHED"`) {
+		t.Fatalf("unexpected error at active alert limit: %s", res.Body)
+	}
 	request(http.MethodPost, collection, `{"type":"price","value":"0","direction":"gte"}`, 999, http.StatusBadRequest)
 	request(http.MethodPost, collection, `{"type":"price","value":"100"}`, 123, http.StatusBadRequest)
 	request(http.MethodPatch, resource, `{"type":"percent","value":"-100","direction":"lte"}`, 999, http.StatusBadRequest)
@@ -123,9 +133,13 @@ func TestAlertMutationRoutes(t *testing.T) {
 	assertDirection(request(http.MethodPatch, resource, `{"is_active":false}`, 123, http.StatusOK), firstTarget, alerts.LessOrEqual)
 	request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusConflict)
 	store.subscription.ExchangeActive = true
+	res = request(http.MethodPost, collection, createBody, 123, http.StatusConflict)
+	if !strings.Contains(res.Body.String(), `"SUBSCRIPTION_ALERT_LIMIT_REACHED"`) {
+		t.Fatalf("unexpected error at per-subscription alert limit: %s", res.Body)
+	}
 	assertDirection(request(http.MethodPatch, resource, `{"is_active":true}`, 123, http.StatusOK), firstTarget, alerts.LessOrEqual)
 	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"5","direction":"gte"}`, 123, http.StatusOK), firstTarget, alerts.GreaterOrEqual)
-	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500", alerts.GreaterOrEqual)
+	assertDirection(request(http.MethodPatch, resource, `{"type":"percent","value":"-5","direction":"gte"}`, 123, http.StatusOK), "85500.00", alerts.GreaterOrEqual)
 
 	res = request(http.MethodDelete, resource, "", 123, http.StatusNoContent)
 	if res.Body.Len() != 0 {

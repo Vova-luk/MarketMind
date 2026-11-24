@@ -12,11 +12,12 @@ export default function SearchSheet({
   const [sortAsc, setSortAsc] = useState(false);
 
   const [selectedExchangeId, setSelectedExchangeId] = useState(() =>
-    exchanges.length > 0 ? exchanges[0].id : 1
+    exchanges.length > 0 ? exchanges[0].id : null
   );
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const dropdownRef = useRef(null);
 
@@ -26,6 +27,9 @@ export default function SearchSheet({
       !exchanges.some((e) => e.id === selectedExchangeId)
     ) {
       setSelectedExchangeId(exchanges[0].id);
+    } else if (exchanges.length === 0) {
+      setSelectedExchangeId(null);
+      setMarkets([]);
     }
   }, [exchanges, selectedExchangeId]);
 
@@ -45,14 +49,28 @@ export default function SearchSheet({
     let active = true;
     const loadMarkets = async () => {
       setLoading(true);
+      setSearchError('');
       try {
         const res = await searchMarketsApi(selectedExchangeId, searchQuery);
         if (active) {
           setMarkets(res.items || []);
           setLoading(false);
         }
-      } catch (e) {
-        if (active) setLoading(false);
+      } catch (err) {
+        if (!active) return;
+        setMarkets([]);
+        setLoading(false);
+
+        const status = err.response?.status;
+        if (status === 503) {
+          setSearchError('Проблемы с получением данных с биржи');
+        } else if (status === 400) {
+          setSearchError('Некорректный поисковый запрос');
+        } else {
+          setSearchError(
+            err.response?.data?.message || 'Не удалось загрузить список рынков'
+          );
+        }
       }
     };
 
@@ -63,29 +81,15 @@ export default function SearchSheet({
     };
   }, [selectedExchangeId, searchQuery]);
 
-  const handleToggleExchange = (exchangeId) => {
-    triggerHaptic('light');
-    setSelectedExchangeIds((prev) => {
-      const isSelected = prev.includes(exchangeId);
-      if (isSelected) {
-        if (prev.length === 1) {
-          return prev;
-        }
-        return prev.filter((id) => id !== exchangeId);
-      } else {
-        return [...prev, exchangeId];
-      }
-    });
-  };
-
-  const getExchangeName = (exchangeId) => {
-    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
-  };
-
   const handleSelectExchange = (exchangeId) => {
     triggerHaptic('light');
     setSelectedExchangeId(exchangeId);
     setIsDropdownOpen(false);
+  };
+
+  const getExchangeName = (exchangeId) => {
+    if (!exchangeId || exchanges.length === 0) return 'Биржа';
+    return exchanges.find((e) => e.id === exchangeId)?.name || 'Биржа';
   };
 
   const findExistingSubscription = (market) => {
@@ -106,7 +110,7 @@ export default function SearchSheet({
 
   return (
     <div className="mt-6 space-y-4">
-      {/* поле поиска */}
+      {/* Поле поиска */}
       <div className="relative">
         <input
           type="text"
@@ -118,7 +122,7 @@ export default function SearchSheet({
         <Search className="w-5 h-5 text-gray-400 absolute right-3 top-3" />
       </div>
 
-      {/* фильтра */}
+      {/* Фильтры */}
       <div className="flex items-center justify-between text-xs relative">
         <div className="flex items-center gap-2">
           <button
@@ -142,32 +146,40 @@ export default function SearchSheet({
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute left-0 mt-1.5 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-40 overflow-hidden">
-                {exchanges.map((exchange) => {
-                  const isSelected = exchange.id === selectedExchangeId;
+              <div className="absolute left-0 mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg py-1 z-40 overflow-hidden">
+                {exchanges.length === 0 ? (
+                  <div className="px-3 py-2.5 text-xs text-gray-400 text-center">
+                    Не найдено доступных бирж
+                  </div>
+                ) : (
+                  exchanges.map((exchange) => {
+                    const isSelected = exchange.id === selectedExchangeId;
 
-                  return (
-                    <button
-                      key={exchange.id}
-                      type="button"
-                      onClick={() => handleSelectExchange(exchange.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-blue-50 text-blue-600 font-medium'
-                          : 'text-gray-800 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span>{exchange.name}</span>
-                      {isSelected && <Check className="w-4 h-4 text-blue-600" />}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={exchange.id}
+                        type="button"
+                        onClick={() => handleSelectExchange(exchange.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>{exchange.name}</span>
+                        {isSelected && (
+                          <Check className="w-4 h-4 text-blue-600" />
+                        )}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* сброс фильтров */}
+        {/* Сброс фильтров */}
         <button
           onClick={() => {
             setSearchQuery('');
@@ -184,11 +196,19 @@ export default function SearchSheet({
         </button>
       </div>
 
-      {/* список монет */}
+      {/* Список монет и состояния ответа */}
       <div className="space-y-3 pt-2">
         {loading ? (
           <div className="text-center py-12 text-gray-400 text-sm">
             Загрузка рынков...
+          </div>
+        ) : exchanges.length === 0 ? (
+          <div className="text-center py-16 text-gray-400 text-sm">
+            Не найдено доступных бирж
+          </div>
+        ) : searchError ? (
+          <div className="text-center py-14 px-4 text-red-500 text-sm">
+            {searchError}
           </div>
         ) : sortedMarkets.length === 0 ? (
           <div className="text-center py-16 text-gray-400 text-sm">
@@ -199,7 +219,7 @@ export default function SearchSheet({
             const existingSub = findExistingSubscription(market);
             const isWatched = Boolean(existingSub);
             const priceLabel =
-              market.price !== null
+              market.price !== null && market.price !== undefined
                 ? `${Number(market.price).toLocaleString('ru-RU')} ${market.quote_asset}`
                 : 'Н/Д';
 

@@ -25,8 +25,9 @@ const (
 )
 
 type sendMessageRequest struct {
-	ChatID int64  `json:"chat_id"`
-	Text   string `json:"text"`
+	ChatID    int64  `json:"chat_id"`
+	Text      string `json:"text"`
+	ParseMode string `json:"parse_mode"`
 }
 
 type responseParameters struct {
@@ -78,7 +79,7 @@ func (e *apiError) Error() string {
 func (e *apiError) RetryAfter() time.Duration { return e.retryAfter }
 
 func (c *Client) SendMessage(ctx context.Context, userID int64, text string) error {
-	payload, err := json.Marshal(sendMessageRequest{ChatID: userID, Text: text})
+	payload, err := json.Marshal(sendMessageRequest{ChatID: userID, Text: text, ParseMode: "HTML"})
 	if err != nil {
 		return fmt.Errorf("encode Telegram message: %w", err)
 	}
