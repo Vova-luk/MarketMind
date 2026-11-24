@@ -1,0 +1,7 @@
+name: marketmind-test
+
+include:
+  - path:
+      - compose.yaml
+      - compose.test.override.yaml
+    env_file: test.env

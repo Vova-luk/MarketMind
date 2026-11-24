@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -15,19 +14,6 @@ import (
 
 	"marketmind-tests/internal/testutil"
 )
-
-const (
-	subscriptionsPath = "/api/v1/subscriptions"
-	binanceExchangeID = 1
-	btcusdtExternalID = "BTCUSDT"
-)
-
-type subscriptionResponse struct {
-	ID           int64  `json:"subscription_id,string"`
-	BaseAsset    string `json:"base_asset"`
-	QuoteAsset   string `json:"quote_asset"`
-	ExchangeName string `json:"exchange_name"`
-}
 
 type watchlistResponse struct {
 	Items []subscriptionResponse `json:"items"`
@@ -44,19 +30,15 @@ func TestIT01_WatchlistLifecycle(t *testing.T) {
 	defer cancel()
 
 	env := testutil.New(t, ctx)
-	marketID := seedBTCUSDTMarket(t, ctx, env.DB)
+	market := seedMarket(t, ctx, env.DB, spotMarket(binance, "BTC", "65000.50"))
 	user := env.RegisterUser(t, ctx)
 
-	var created subscriptionResponse
-	user.API.RequestJSON(t, ctx, http.MethodPost, subscriptionsPath, map[string]any{
-		"exchange_id": binanceExchangeID,
-		"external_id": btcusdtExternalID,
-	}, http.StatusCreated, &created)
+	created := addSubscription(t, ctx, user, market)
 	want := subscriptionResponse{
 		ID: created.ID, BaseAsset: "BTC", QuoteAsset: "USDT", ExchangeName: "Binance",
 	}
-	if created.ID <= 0 || created != want {
-		t.Fatalf("created subscription: got %+v, want a positive ID and %+v", created, want)
+	if created != want {
+		t.Fatalf("created subscription: got %+v, want %+v", created, want)
 	}
 
 	var afterAdd watchlistResponse
@@ -65,7 +47,7 @@ func TestIT01_WatchlistLifecycle(t *testing.T) {
 		t.Fatalf("watchlist after add: got %+v, want [%+v]", afterAdd.Items, want)
 	}
 	assertStoredWatchlist(t, ctx, env.DB, user.TelegramID, created.ID,
-		[]storedSubscription{{ID: created.ID, MarketID: marketID, TelegramID: user.TelegramID}})
+		[]storedSubscription{{ID: created.ID, MarketID: market.ID, TelegramID: user.TelegramID}})
 
 	user.API.RequestJSON(t, ctx, http.MethodDelete, fmt.Sprintf("%s/%d", subscriptionsPath, created.ID),
 		nil, http.StatusNoContent, nil)
@@ -76,39 +58,6 @@ func TestIT01_WatchlistLifecycle(t *testing.T) {
 		t.Fatalf("watchlist after delete: got %#v, want an empty items array", afterDelete.Items)
 	}
 	assertStoredWatchlist(t, ctx, env.DB, user.TelegramID, created.ID, nil)
-}
-
-func seedBTCUSDTMarket(t *testing.T, ctx context.Context, db *pgx.Conn) int64 {
-	t.Helper()
-	var id int64
-	err := db.QueryRow(ctx, `
-		INSERT INTO market_mind.markets (exchange_id, external_id, base_asset, quote_asset, price)
-		VALUES ($1, $2, 'BTC', 'USDT', 65000.50)
-		ON CONFLICT (exchange_id, external_id) DO NOTHING
-		RETURNING id
-	`, binanceExchangeID, btcusdtExternalID).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		// Reuse a market already present in the test database without deleting it at cleanup.
-		err = db.QueryRow(ctx, `
-			SELECT id FROM market_mind.markets
-			WHERE exchange_id = $1 AND external_id = $2
-		`, binanceExchangeID, btcusdtExternalID).Scan(&id)
-		if err != nil {
-			t.Fatalf("look up BTC/USDT fixture: %v", err)
-		}
-		return id
-	}
-	if err != nil {
-		t.Fatalf("insert BTC/USDT fixture: %v", err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := db.Exec(ctx, "DELETE FROM market_mind.markets WHERE id = $1", id); err != nil {
-			t.Errorf("delete BTC/USDT fixture: %v", err)
-		}
-	})
-	return id
 }
 
 func assertStoredWatchlist(t *testing.T, ctx context.Context, db *pgx.Conn, telegramID, createdID int64, want []storedSubscription) {

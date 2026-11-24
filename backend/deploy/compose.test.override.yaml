@@ -1,0 +1,61 @@
+x-stub: &stub
+  build:
+    context: ../tests/stubs
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+    interval: 2s
+    timeout: 2s
+    retries: 10
+
+services:
+  api:
+    env_file: !reset []
+    environment:
+      MARKETMIND_TELEGRAM__BOT_TOKEN: ${MARKETMIND_TELEGRAM__BOT_TOKEN:?Set the test bot token}
+    ports: !override
+      - "127.0.0.1:${MARKETMIND_SERVER__PORT}:8080"
+    healthcheck:
+      interval: 2s
+
+  exchange-data:
+    environment:
+      EXCHANGE_DATA_BYBIT_BASE_URL: http://bybit-stub:8080
+      EXCHANGE_DATA_BINANCE_BASE_URL: http://bybit-stub:8080
+      EXCHANGE_DATA_OKX_BASE_URL: http://bybit-stub:8080
+    volumes:
+      - ./exchange-data.test.yaml:/app/config/config.yaml:ro
+    depends_on:
+      bybit-stub:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8184/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  tracking:
+    healthcheck:
+      interval: 2s
+
+  bot:
+    environment:
+      BOT_TELEGRAM_API_URL: http://telegram-stub:8080
+    depends_on:
+      telegram-stub:
+        condition: service_healthy
+    healthcheck:
+      interval: 2s
+
+  bybit-stub:
+    <<: *stub
+    command: ["bybit"]
+    ports:
+      - "127.0.0.1:${TEST_BYBIT_STUB_PORT}:8080"
+
+  telegram-stub:
+    <<: *stub
+    command: ["telegram"]
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?Set the test bot token}
+    ports:
+      - "127.0.0.1:${TEST_TELEGRAM_STUB_PORT}:8080"
