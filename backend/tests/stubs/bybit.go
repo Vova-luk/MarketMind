@@ -26,7 +26,10 @@ type bybitTickerList struct {
 }
 
 func registerBybit(mux *http.ServeMux) {
-	stub := &bybitStub{prices: map[string]string{"IT06USDT": "100"}}
+	stub := &bybitStub{prices: map[string]string{
+		"BTCUSDT":  "65000.501234",
+		"IT06USDT": "100",
+	}}
 	mux.HandleFunc("GET /v5/market/tickers", stub.listTickers)
 	mux.HandleFunc("GET /v5/market/instruments-info", stub.listInstruments)
 	mux.HandleFunc("PUT /ticker-fault", stub.setTickerFault)
