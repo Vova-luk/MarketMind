@@ -11,12 +11,13 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("alert not found")
-	ErrInvalid      = errors.New("invalid alert condition")
-	ErrExchangeOff  = errors.New("exchange is inactive")
-	ErrQuoteMissing = errors.New("positive market price is unavailable")
-	ErrActiveLimit  = errors.New("active alert limit reached")
-	decimalPattern  = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
+	ErrNotFound             = errors.New("alert not found")
+	ErrInvalid              = errors.New("invalid alert condition")
+	ErrExchangeOff          = errors.New("exchange is inactive")
+	ErrQuoteMissing         = errors.New("positive market price is unavailable")
+	ErrActiveLimit          = errors.New("active alert limit reached")
+	ErrPerSubscriptionLimit = errors.New("alert limit for this subscription reached")
+	decimalPattern          = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 )
 
 type Condition struct {
@@ -73,6 +74,7 @@ type Transaction interface {
 	Update(ctx context.Context, alert Alert) error
 	Delete(ctx context.Context, alertID int64) error
 	CountActive(ctx context.Context) (int, error)
+	CountForSubscription(ctx context.Context) (int, error)
 	Commit(ctx context.Context) error
 	Rollback(ctx context.Context) error
 }

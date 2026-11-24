@@ -18,34 +18,40 @@ func TestIT14_ActiveAlertLimitPerUser(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	env := testutil.New(t, ctx)
-	first := seedMarket(t, ctx, env.DB, spotMarket(binance, "IT"+rand.Text(), "90"))
-	second := seedMarket(t, ctx, env.DB, spotMarket(binance, "IT"+rand.Text(), "90"))
+	extraMarket := seedMarket(t, ctx, env.DB, spotMarket(binance, "IT"+rand.Text(), "90"))
 	owner := env.RegisterUser(t, ctx)
 	otherUser := env.RegisterUser(t, ctx)
-	firstSubscription := addSubscription(t, ctx, owner, first)
-	secondSubscription := addSubscription(t, ctx, owner, second)
-	otherSubscription := addSubscription(t, ctx, otherUser, second)
+	extraSubscription := addSubscription(t, ctx, owner, extraMarket)
+	otherSubscription := addSubscription(t, ctx, otherUser, extraMarket)
 
-	const activeLimit = 50 // Configured in the API configuration used by the test stack.
+	const (
+		activeLimit          = 50
+		perSubscriptionLimit = 10
+	)
 	var firstAlertID int64
-	for i := range activeLimit {
-		alert := addRisingPriceAlert(t, ctx, owner, firstSubscription.ID, fmt.Sprint(100+i))
-		if i == 0 {
-			firstAlertID = alert.ID
+	var alertPath string
+	for range activeLimit / perSubscriptionLimit {
+		market := seedMarket(t, ctx, env.DB, spotMarket(binance, "IT"+rand.Text(), "90"))
+		subscription := addSubscription(t, ctx, owner, market)
+		for i := range perSubscriptionLimit {
+			alert := addRisingPriceAlert(t, ctx, owner, subscription.ID, fmt.Sprint(100+i))
+			if firstAlertID == 0 {
+				firstAlertID = alert.ID
+				alertPath = fmt.Sprintf("%s/%d", subscriptionAlertsPath(subscription.ID), alert.ID)
+			}
 		}
 	}
 	addRisingPriceAlert(t, ctx, otherUser, otherSubscription.ID, "200")
 	condition := map[string]any{"type": alerts.Price, "value": "200", "direction": alerts.GreaterOrEqual}
-	assertAPIError(t, ctx, owner.API, http.MethodPost, subscriptionAlertsPath(secondSubscription.ID), condition,
+	assertAPIError(t, ctx, owner.API, http.MethodPost, subscriptionAlertsPath(extraSubscription.ID), condition,
 		http.StatusConflict, "ACTIVE_ALERT_LIMIT_REACHED")
 
-	alertPath := fmt.Sprintf("%s/%d", subscriptionAlertsPath(firstSubscription.ID), firstAlertID)
 	var disabled alertResponse
 	owner.API.RequestJSON(t, ctx, http.MethodPatch, alertPath, map[string]bool{"is_active": false}, http.StatusOK, &disabled)
 	if disabled.ID != firstAlertID || disabled.IsActive {
 		t.Fatalf("disabled alert: got %+v, want inactive alert %d", disabled, firstAlertID)
 	}
-	addRisingPriceAlert(t, ctx, owner, secondSubscription.ID, "200")
+	addRisingPriceAlert(t, ctx, owner, extraSubscription.ID, "200")
 	assertAPIError(t, ctx, owner.API, http.MethodPatch, alertPath, map[string]bool{"is_active": true},
 		http.StatusConflict, "ACTIVE_ALERT_LIMIT_REACHED")
 

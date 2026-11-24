@@ -161,6 +161,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error) 
 		httpresponse.WriteError(w, http.StatusConflict, "EXCHANGE_INACTIVE", "Exchange is inactive")
 	case errors.Is(err, domain.ErrActiveLimit):
 		httpresponse.WriteError(w, http.StatusConflict, "ACTIVE_ALERT_LIMIT_REACHED", "Active alert limit reached")
+	case errors.Is(err, domain.ErrPerSubscriptionLimit):
+		httpresponse.WriteError(w, http.StatusConflict, "SUBSCRIPTION_ALERT_LIMIT_REACHED", "Alert limit for this subscription reached")
 	case errors.Is(err, domain.ErrQuoteMissing):
 		httpresponse.WriteError(w, http.StatusServiceUnavailable, "QUOTE_UNAVAILABLE", "Market price is unavailable")
 	default:
