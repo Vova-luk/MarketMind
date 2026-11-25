@@ -9,19 +9,9 @@ export default function CoinSheet({
 }) {
   const [targetPriceInput, setTargetPriceInput] = useState('');
   const [targetPercentInput, setTargetPercentInput] = useState('');
-  const [priceDirection, setPriceDirection] = useState('gte'); // 'gte' | 'lte'
   const [inputError, setInputError] = useState('');
 
-  const currentPrice = Number(detail.price || 0);
-
-  const handlePriceChange = (e) => {
-    const val = e.target.value;
-    setTargetPriceInput(val);
-    const num = Number(val.replace(',', '.'));
-    if (!isNaN(num) && num > 0 && currentPrice > 0) {
-      setPriceDirection(num >= currentPrice ? 'gte' : 'lte');
-    }
-  };
+  const currentPrice = Number(detail.price_exact ?? detail.price ?? 0);
 
   const handlePriceSubmit = () => {
     const raw = targetPriceInput.trim().replace(',', '.');
@@ -71,7 +61,6 @@ export default function CoinSheet({
     setTargetPercentInput('');
   };
 
-  // Проверяем, выше ли целевая цена, чем цена в момент создания алерта
   const isTargetAboveReference = (alert) => {
     const target = Number(alert.target_price);
     const ref = Number(alert.reference_price);
@@ -110,11 +99,13 @@ export default function CoinSheet({
         </div>
       </div>
 
-      {/* добавление алерта */}
+      {/* Добавление уведомления */}
       <div>
-        <h3 className="text-xl font-normal text-black mb-3">Добавить алерт</h3>
+        <h3 className="text-xl font-normal text-black mb-3">
+          Добавить уведомление
+        </h3>
         <div className="grid grid-cols-2 gap-3">
-          {/* достижение стоимости */}
+          {/* Достижение стоимости */}
           <div className="p-3 rounded-2xl border border-gray-200 shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs text-gray-700">
@@ -125,7 +116,7 @@ export default function CoinSheet({
             <input
               type="number"
               value={targetPriceInput}
-              onChange={handlePriceChange}
+              onChange={(e) => setTargetPriceInput(e.target.value)}
               placeholder="85000"
               className={`w-full px-2 py-1 text-sm border rounded-md mb-2 focus:outline-none ${
                 inputError ? 'border-red-500' : 'border-gray-300'
@@ -142,7 +133,7 @@ export default function CoinSheet({
             </div>
           </div>
 
-          {/* изменение на % */}
+          {/* Изменение на % */}
           <div className="p-3 rounded-2xl border border-gray-200 shadow-xs flex flex-col justify-between">
             <label className="text-xs text-gray-700 mb-2">
               Изменение на (%)
@@ -171,12 +162,14 @@ export default function CoinSheet({
         )}
       </div>
 
-      {/* алерты */}
+      {/* Список активных уведомлений */}
       <div>
-        <h3 className="text-xl font-normal text-black mb-3">Активные алерты</h3>
+        <h3 className="text-xl font-normal text-black mb-3">
+          Активные уведомления
+        </h3>
         {!detail.alerts || detail.alerts.length === 0 ? (
           <p className="text-center text-gray-500 text-sm py-6">
-            У Вас нет активных алертов
+            У вас нет активных уведомлений
           </p>
         ) : (
           <div className="space-y-3">
@@ -202,7 +195,11 @@ export default function CoinSheet({
                           ({formatAlertBadge(alert, isUp)})
                         </span>
                       </span>
-                      
+                      <span className="text-[11px] text-gray-400">
+                        {isUp
+                          ? 'Отклонение вверх (рост)'
+                          : 'Отклонение вниз (падение)'}
+                      </span>
                     </div>
                   </div>
 

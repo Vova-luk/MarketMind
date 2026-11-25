@@ -98,7 +98,11 @@ func (a *Application) initRouter() error {
 	subscriptionRepo := subscriptionrepository.NewRepository(a.database)
 	addSubscriptions := subscriptionservice.NewService(subscriptionRepo, a.config.Int("subscriptions.limit"))
 	subscriptions := subscriptionhandlers.NewHandler(subscriptionRepo, addSubscriptions, a.logger)
-	alerts := alertservice.NewService(alertrepository.NewRepository(a.database), a.config.Int("alerts.active_limit"))
+	alerts := alertservice.NewService(
+		alertrepository.NewRepository(a.database),
+		a.config.Int("alerts.active_limit"),
+		a.config.Int("alerts.per_subscription_limit"),
+	)
 	a.router = NewRouter(a.logger, botToken, users, exchanges, subscriptions, alerthandlers.NewHandler(alerts, subscriptionRepo, a.logger), markets)
 	return nil
 }

@@ -9,17 +9,22 @@ import (
 )
 
 const DefaultActiveLimit = 50
+const defaultPerSubscriptionLimit = 10
 
 type Service struct {
-	repository  domain.Repository
-	activeLimit int
+	repository           domain.Repository
+	activeLimit          int
+	perSubscriptionLimit int
 }
 
-func NewService(repository domain.Repository, activeLimit int) *Service {
+func NewService(repository domain.Repository, activeLimit, perSubscriptionLimit int) *Service {
 	if activeLimit <= 0 {
 		activeLimit = DefaultActiveLimit
 	}
-	return &Service{repository: repository, activeLimit: activeLimit}
+	if perSubscriptionLimit <= 0 {
+		perSubscriptionLimit = defaultPerSubscriptionLimit
+	}
+	return &Service{repository: repository, activeLimit: activeLimit, perSubscriptionLimit: perSubscriptionLimit}
 }
 
 type Patch struct {
@@ -51,8 +56,15 @@ func (s *Service) Create(ctx context.Context, telegramUserID, subscriptionID int
 	if err := validateTarget(target, alert.ReferencePrice); err != nil {
 		return Result{}, err
 	}
-	if err := s.checkLimit(ctx, tx); err != nil {
+	if err := s.checkActiveLimit(ctx, tx); err != nil {
 		return Result{}, err
+	}
+	count, err := tx.CountForSubscription(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	if count >= s.perSubscriptionLimit {
+		return Result{}, domain.ErrPerSubscriptionLimit
 	}
 
 	alert.ID, err = tx.Insert(ctx, alert)
@@ -109,7 +121,7 @@ func (s *Service) Update(ctx context.Context, telegramUserID, subscriptionID, al
 		}
 	}
 	if enabling {
-		if err := s.checkLimit(ctx, tx); err != nil {
+		if err := s.checkActiveLimit(ctx, tx); err != nil {
 			return Result{}, err
 		}
 	}
@@ -136,7 +148,7 @@ func (s *Service) Delete(ctx context.Context, telegramUserID, subscriptionID, al
 	return tx.Commit(ctx)
 }
 
-func (s *Service) checkLimit(ctx context.Context, tx domain.Transaction) error {
+func (s *Service) checkActiveLimit(ctx context.Context, tx domain.Transaction) error {
 	count, err := tx.CountActive(ctx)
 	if err != nil {
 		return err

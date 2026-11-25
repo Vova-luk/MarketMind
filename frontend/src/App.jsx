@@ -4,7 +4,7 @@ import Header from './components/Header';
 import CoinCard from './components/CoinCard';
 import SearchSheet from './components/SearchSheet';
 import CoinSheet from './components/CoinSheet';
-import { initTelegram, triggerHaptic } from './utils/telegram';
+import { initTelegram, getTelegramUser, triggerHaptic } from './utils/telegram';
 import {
   initAppData,
   addSubscriptionApi,
@@ -27,7 +27,6 @@ export default function App() {
 
   const [activeSheet, setActiveSheet] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
-
   const [subToDelete, setSubToDelete] = useState(null);
 
   const [toastMessage, setToastMessage] = useState('');
@@ -86,7 +85,22 @@ export default function App() {
     loadInitial();
   }, []);
 
-  //карточка монеты
+  const updateSubscriptionAlerts = (subscriptionId, updateFn) => {
+    setSelectedDetail((prev) => {
+      if (!prev || prev.subscription_id !== subscriptionId) return prev;
+      return { ...prev, alerts: updateFn(prev.alerts || []) };
+    });
+
+    setSubscriptions((prev) =>
+      prev.map((sub) =>
+        sub.subscription_id === subscriptionId
+          ? { ...sub, alerts: updateFn(sub.alerts || []) }
+          : sub
+      )
+    );
+  };
+
+  // Карточка монеты
   const handleOpenSubscription = async (subscriptionId) => {
     triggerHaptic('light');
     const baseSub = subscriptions.find(
@@ -101,12 +115,11 @@ export default function App() {
     } catch (e) {}
   };
 
-  //добавить-удалить подписку
+  // Добавить / удалить подписку
   const handleToggleSubscription = async (market, existingSub) => {
     triggerHaptic('light');
 
     if (existingSub) {
-      //удалить
       setSubToDelete(existingSub);
     } else {
       if (subscriptions.length >= MAX_SUBSCRIPTIONS) {
@@ -121,7 +134,7 @@ export default function App() {
     }
   };
 
-  //создание алерта
+  // Создание уведомления
   const handleAddAlert = async (alertPayload) => {
     if (!selectedDetail) return;
 
@@ -150,16 +163,14 @@ export default function App() {
     triggerHaptic('light');
     const subId = selectedDetail.subscription_id;
 
-    setSelectedDetail((prev) => ({
-      ...prev,
-      alerts: prev.alerts.map((a) =>
-        a.alert_id === alertId ? { ...a, is_active: nextActive } : a
-      ),
-    }));
-
     try {
-      await toggleAlertApi(subId, alertId, nextActive);
-    } catch (e) {}
+      const updated = await toggleAlertApi(subId, alertId, nextActive);
+      updateSubscriptionAlerts(subId, (alerts) =>
+        alerts.map((a) => (a.alert_id === alertId ? updated : a))
+      );
+    } catch (e) {
+      console.error('Ошибка переключения уведомления:', e);
+    }
   };
 
   //удаление алерта
@@ -168,14 +179,14 @@ export default function App() {
     triggerHaptic('medium');
     const subId = selectedDetail.subscription_id;
 
-    setSelectedDetail((prev) => ({
-      ...prev,
-      alerts: prev.alerts.filter((a) => a.alert_id !== alertId),
-    }));
-
     try {
       await deleteAlertApi(subId, alertId);
-    } catch (e) {}
+      updateSubscriptionAlerts(subId, (alerts) =>
+        alerts.filter((a) => a.alert_id !== alertId)
+      );
+    } catch (e) {
+      console.error('Ошибка удаления уведомления:', e);
+    }
   };
 
   return (
@@ -184,7 +195,9 @@ export default function App() {
 
       <main
         className={`flex-1 p-4 space-y-3 transition-all duration-200 ${
-          activeSheet ? 'blur-xs pointer-events-none select-none opacity-60' : ''
+          activeSheet || subToDelete
+            ? 'blur-xs pointer-events-none select-none opacity-60'
+            : ''
         }`}
       >
         {isLoading ? (
@@ -217,7 +230,7 @@ export default function App() {
         )}
       </main>
 
-      {!activeSheet && (
+      {!activeSheet && !subToDelete && (
         <button
           onClick={() => {
             triggerHaptic('medium');
@@ -273,10 +286,10 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bg-white rounded-2xl p-5 shadow-xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-xs bg-white rounded-2xl p-5 shadow-xl space-y-4 text-center"
           >
             <h3 className="text-base font-medium text-black">
-              Газ удалять {subToDelete.base_asset}/{subToDelete.quote_asset} (
+              Удалить {subToDelete.base_asset}/{subToDelete.quote_asset} (
               {subToDelete.exchange_name})?
             </h3>
 
@@ -286,14 +299,14 @@ export default function App() {
                 onClick={() => setSubToDelete(null)}
                 className="py-2 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm font-medium text-gray-700 cursor-pointer transition-colors"
               >
-                не
+                Отмена
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteSubscription}
                 className="py-2 px-4 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-medium text-white cursor-pointer transition-colors"
               >
-                газ
+                Удалить
               </button>
             </div>
           </div>

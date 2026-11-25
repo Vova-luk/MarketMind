@@ -32,7 +32,7 @@ func TestUpdateAlertNotificationState(t *testing.T) {
 				alert: domain.Alert{ID: 9, Condition: domain.Condition{Type: alerts.Percent, Value: "5", Direction: alerts.GreaterOrEqual},
 					ReferencePrice: "100", IsActive: tc.wasActive, IsNotified: true},
 			}
-			_, err := alertservice.NewService(store, 50).Update(context.Background(), 123, 18, 9,
+			_, err := alertservice.NewService(store, 50, 10).Update(context.Background(), 123, 18, 9,
 				alertservice.Patch{Condition: tc.condition, IsActive: tc.active})
 			if err != nil {
 				t.Fatal(err)

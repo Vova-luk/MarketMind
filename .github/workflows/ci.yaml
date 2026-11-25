@@ -1,6 +1,25 @@
 name: MarketMind CI
 
 on:
+  workflow_call:
+    inputs:
+      full-regression:
+        description: Run all integration tests instead of only smoke tests
+        type: boolean
+        default: false
+      run-e2e:
+        description: Run the end-to-end suite on the shared test stack
+        type: boolean
+        default: false
+      run-nonfunctional:
+        description: Run the nonfunctional suite on the shared test stack
+        type: boolean
+        default: false
+      extended-nonfunctional:
+        description: Use the weekly load profile and check PostgreSQL restart
+        type: boolean
+        default: false
+
   pull_request:
     branches:
       - main
@@ -57,3 +76,72 @@ jobs:
 
       - name: Run Go tests
         run: go test -race -count=1 ./...
+
+  integration:
+    name: Backend integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/tests/go.mod
+          cache-dependency-path: backend/tests/go.sum
+
+      - name: Start test services
+        id: test-stack
+        run: docker compose --env-file deploy/test.env -f deploy/compose.test.yaml up --build --wait --wait-timeout 180
+
+      - name: Run backend smoke tests
+        if: ${{ !inputs.full-regression }}
+        working-directory: backend/tests
+        run: |
+          set -a
+          source ../deploy/test.env
+          set +a
+          go test -race -tags=smoke -count=1 -v ./...
+
+      - name: Run all backend integration tests
+        if: ${{ !cancelled() && steps.test-stack.outcome == 'success' && inputs.full-regression }}
+        working-directory: backend/tests
+        run: |
+          set -a
+          source ../deploy/test.env
+          set +a
+          go test -race -tags=integration,smoke -count=1 -v ./integration/...
+
+      - name: Run backend end-to-end tests
+        if: ${{ !cancelled() && steps.test-stack.outcome == 'success' && inputs.run-e2e }}
+        working-directory: backend/tests
+        run: |
+          set -a
+          source ../deploy/test.env
+          set +a
+          go test -race -tags=e2e,smoke -count=1 -v ./end-to-end/...
+
+      - name: Run backend nonfunctional tests
+        if: ${{ !cancelled() && steps.test-stack.outcome == 'success' && inputs.run-nonfunctional }}
+        working-directory: backend/tests
+        env:
+          TEST_NF_EXTENDED: ${{ inputs.extended-nonfunctional }}
+        run: |
+          set -a
+          source ../deploy/test.env
+          set +a
+          go test -race -tags=nonfunctional,smoke -count=1 -v ./nonfunctional/...
+
+      - name: Print test service logs
+        if: failure()
+        run: docker compose --env-file deploy/test.env -f deploy/compose.test.yaml logs --tail=100
+
+      - name: Stop test services
+        if: always()
+        run: docker compose --env-file deploy/test.env -f deploy/compose.test.yaml down --volumes
