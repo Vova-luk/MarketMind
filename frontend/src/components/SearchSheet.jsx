@@ -3,7 +3,7 @@ import { Search, Trash2, Bookmark, ChevronDown, Check } from 'lucide-react';
 import { searchMarketsApi } from '../api/marketApi';
 import { triggerHaptic } from '../utils/telegram';
 
-const PAGE_LIMIT = 20;
+const PAGE_LIMIT = 10;
 
 export default function SearchSheet({
   exchanges,
