@@ -3,6 +3,8 @@ import { Search, Trash2, Bookmark, ChevronDown, Check } from 'lucide-react';
 import { searchMarketsApi } from '../api/marketApi';
 import { triggerHaptic } from '../utils/telegram';
 
+const PAGE_LIMIT = 20;
+
 export default function SearchSheet({
   exchanges,
   subscriptions,
@@ -17,8 +19,11 @@ export default function SearchSheet({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [nextPage, setNextPage] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const dropdownRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (
@@ -43,16 +48,38 @@ export default function SearchSheet({
     if (!selectedExchangeId) return;
 
     let active = true;
+    const currentRequest = ++requestIdRef.current;
+    setNextPage(null);
+    setLoadingMore(false);
+
     const loadMarkets = async () => {
       setLoading(true);
       try {
-        const res = await searchMarketsApi(selectedExchangeId, searchQuery);
-        if (active) {
-          setMarkets(res.items || []);
+        const res = await searchMarketsApi(
+          selectedExchangeId,
+          searchQuery,
+          1,
+          PAGE_LIMIT
+        );
+        if (!active || requestIdRef.current !== currentRequest) return;
+
+        const items = res.items || [];
+        setMarkets(items);
+        setNextPage(
+          res.next_page !== undefined
+            ? res.next_page
+            : items.length === PAGE_LIMIT
+              ? 2
+              : null
+        );
+      } catch (e) {
+        if (!active || requestIdRef.current !== currentRequest) return;
+        setMarkets([]);
+        setNextPage(null);
+      } finally {
+        if (active && requestIdRef.current === currentRequest) {
           setLoading(false);
         }
-      } catch (e) {
-        if (active) setLoading(false);
       }
     };
 
@@ -63,19 +90,44 @@ export default function SearchSheet({
     };
   }, [selectedExchangeId, searchQuery]);
 
-  const handleToggleExchange = (exchangeId) => {
-    triggerHaptic('light');
-    setSelectedExchangeIds((prev) => {
-      const isSelected = prev.includes(exchangeId);
-      if (isSelected) {
-        if (prev.length === 1) {
-          return prev;
-        }
-        return prev.filter((id) => id !== exchangeId);
-      } else {
-        return [...prev, exchangeId];
+  const handleLoadMore = async () => {
+    if (!nextPage || loadingMore || loading) return;
+
+    const currentRequest = requestIdRef.current;
+    setLoadingMore(true);
+
+    try {
+      const res = await searchMarketsApi(
+        selectedExchangeId,
+        searchQuery,
+        nextPage,
+        PAGE_LIMIT
+      );
+      if (requestIdRef.current !== currentRequest) return;
+
+      const newItems = res.items || [];
+      setMarkets((prev) => {
+        const seen = new Set(
+          prev.map((m) => `${m.exchange_id}-${m.external_id}`)
+        );
+        const uniqueNew = newItems.filter(
+          (m) => !seen.has(`${m.exchange_id}-${m.external_id}`)
+        );
+        return [...prev, ...uniqueNew];
+      });
+      setNextPage(
+        res.next_page !== undefined
+          ? res.next_page
+          : newItems.length === PAGE_LIMIT
+            ? nextPage + 1
+            : null
+      );
+    } catch (e) {
+    } finally {
+      if (requestIdRef.current === currentRequest) {
+        setLoadingMore(false);
       }
-    });
+    }
   };
 
   const getExchangeName = (exchangeId) => {
@@ -195,48 +247,61 @@ export default function SearchSheet({
             Ничего не найдено
           </div>
         ) : (
-          sortedMarkets.map((market) => {
-            const existingSub = findExistingSubscription(market);
-            const isWatched = Boolean(existingSub);
-            const priceLabel =
-              market.price !== null
-                ? `${Number(market.price).toLocaleString('ru-RU')} ${market.quote_asset}`
-                : 'Н/Д';
+          <>
+            {sortedMarkets.map((market) => {
+              const existingSub = findExistingSubscription(market);
+              const isWatched = Boolean(existingSub);
+              const priceLabel =
+                market.price !== null
+                  ? `${Number(market.price).toLocaleString('ru-RU')} ${market.quote_asset}`
+                  : 'Н/Д';
 
-            return (
-              <div
-                key={`${market.exchange_id}-${market.external_id}`}
-                className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
+              return (
+                <div
+                  key={`${market.exchange_id}-${market.external_id}`}
+                  className="flex items-center justify-between px-4 py-3.5 bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-gray-100"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-base text-black">
+                      {market.display_name}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {getExchangeName(market.exchange_id)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className="text-base font-medium text-black">
+                      {priceLabel}
+                    </span>
+                    <button
+                      onClick={() => onToggleSubscription(market, existingSub)}
+                      className="p-1 cursor-pointer"
+                    >
+                      <Bookmark
+                        className={`w-6 h-6 ${
+                          isWatched
+                            ? 'fill-orange-500 text-orange-500'
+                            : 'text-gray-700'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {nextPage && (
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 text-sm font-medium rounded-xl cursor-pointer transition-colors"
               >
-                <div className="flex flex-col">
-                  <span className="text-base text-black">
-                    {market.display_name}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {getExchangeName(market.exchange_id)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <span className="text-base font-medium text-black">
-                    {priceLabel}
-                  </span>
-                  <button
-                    onClick={() => onToggleSubscription(market, existingSub)}
-                    className="p-1 cursor-pointer"
-                  >
-                    <Bookmark
-                      className={`w-6 h-6 ${
-                        isWatched
-                          ? 'fill-orange-500 text-orange-500'
-                          : 'text-gray-700'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+                {loadingMore ? 'Загрузка...' : 'Показать ещё'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
