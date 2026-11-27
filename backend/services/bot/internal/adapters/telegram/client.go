@@ -18,23 +18,25 @@ import (
 const (
 	botPathPrefix   = "bot"
 	sendMessagePath = "sendMessage"
-	maxResponseSize = 64 << 10
+	maxResponseSize = 1 << 20
 	contentType     = "Content-Type"
 	jsonContentType = "application/json"
 	redactedToken   = "[redacted]"
 )
 
 type sendMessageRequest struct {
-	ChatID    int64  `json:"chat_id"`
-	Text      string `json:"text"`
-	ParseMode string `json:"parse_mode"`
+	ChatID      int64           `json:"chat_id"`
+	Text        string          `json:"text"`
+	ParseMode   string          `json:"parse_mode"`
+	ReplyMarkup *inlineKeyboard `json:"reply_markup,omitempty"`
 }
 
 type responseParameters struct {
 	RetryAfter int32 `json:"retry_after"`
 }
 
-type sendMessageResponse struct {
+type apiResponse struct {
+	Result      json.RawMessage    `json:"result"`
 	OK          bool               `json:"ok"`
 	ErrorCode   int                `json:"error_code"`
 	Description string             `json:"description"`
@@ -43,29 +45,34 @@ type sendMessageResponse struct {
 
 type Client struct {
 	http     *http.Client
+	pollHTTP *http.Client
 	endpoint string
 	token    string
 }
 
 func NewClient(cfg config.TelegramConfig) (*Client, error) {
 	token := strings.TrimSpace(cfg.Token)
-	endpoint, err := url.JoinPath(cfg.APIURL, botPathPrefix+url.PathEscape(token), sendMessagePath)
+	endpoint, err := url.JoinPath(cfg.APIURL, botPathPrefix+url.PathEscape(token))
 	if err != nil {
-		return nil, fmt.Errorf("build Telegram sendMessage URL: %w", err)
+		return nil, fmt.Errorf("build Telegram API URL: %w", err)
 	}
-	return &Client{
-		http: &http.Client{
-			Timeout: cfg.RequestTimeout,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	httpClient := &http.Client{
+		Timeout: cfg.RequestTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
+	}
+	pollClient := *httpClient
+	pollClient.Timeout += pollTimeout
+	return &Client{
+		http: httpClient, pollHTTP: &pollClient,
 		endpoint: endpoint,
 		token:    token,
 	}, nil
 }
 
 type apiError struct {
+	method      string
 	status      int
 	code        int
 	description string
@@ -73,45 +80,58 @@ type apiError struct {
 }
 
 func (e *apiError) Error() string {
-	return fmt.Sprintf("Telegram sendMessage: HTTP %d, API code %d (%s)", e.status, e.code, e.description)
+	return fmt.Sprintf("Telegram %s: HTTP %d, API code %d (%s)", e.method, e.status, e.code, e.description)
 }
 
 func (e *apiError) RetryAfter() time.Duration { return e.retryAfter }
 
 func (c *Client) SendMessage(ctx context.Context, userID int64, text string) error {
-	payload, err := json.Marshal(sendMessageRequest{ChatID: userID, Text: text, ParseMode: "HTML"})
+	return c.sendMessage(ctx, sendMessageRequest{ChatID: userID, Text: text, ParseMode: "HTML"})
+}
+
+func (c *Client) sendMessage(ctx context.Context, message sendMessageRequest) error {
+	return c.call(ctx, c.http, sendMessagePath, message, nil)
+}
+
+func (c *Client) call(ctx context.Context, client *http.Client, method string, request, result any) error {
+	payload, err := json.Marshal(request)
 	if err != nil {
-		return fmt.Errorf("encode Telegram message: %w", err)
+		return fmt.Errorf("encode Telegram %s request: %w", method, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+"/"+method, bytes.NewReader(payload))
 	if err != nil {
-		return errors.New("build Telegram sendMessage request")
+		return errors.New("build Telegram request")
 	}
 	req.Header.Set(contentType, jsonContentType)
 
-	resp, err := c.http.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		var requestErr *url.Error
 		if errors.As(err, &requestErr) {
 			err = requestErr.Err
 		}
-		return fmt.Errorf("call Telegram sendMessage: %w", err)
+		return fmt.Errorf("call Telegram %s: %w", method, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
-		return fmt.Errorf("read Telegram sendMessage response: %w", err)
+		return fmt.Errorf("read Telegram %s response: %w", method, err)
 	}
-	var result sendMessageResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("decode Telegram sendMessage response (HTTP %d): %w", resp.StatusCode, err)
+	var response apiResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("decode Telegram %s response (HTTP %d): %w", method, resp.StatusCode, err)
 	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.OK {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !response.OK {
 		return &apiError{
-			status: resp.StatusCode, code: result.ErrorCode,
-			description: strings.ReplaceAll(result.Description, c.token, redactedToken),
-			retryAfter:  time.Duration(result.Parameters.RetryAfter) * time.Second,
+			method: method, status: resp.StatusCode, code: response.ErrorCode,
+			description: strings.ReplaceAll(response.Description, c.token, redactedToken),
+			retryAfter:  time.Duration(response.Parameters.RetryAfter) * time.Second,
+		}
+	}
+	if result != nil {
+		if err := json.Unmarshal(response.Result, result); err != nil {
+			return fmt.Errorf("decode Telegram %s result: %w", method, err)
 		}
 	}
 	return nil

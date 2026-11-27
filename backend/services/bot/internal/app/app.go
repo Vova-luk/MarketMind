@@ -24,6 +24,7 @@ const (
 type Application struct {
 	server   *server.Server
 	consumer *consumer.PriceChangedConsumer
+	poller   *telegram.Poller
 }
 
 func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
@@ -47,10 +48,14 @@ func New(cfg config.Config, logger *slog.Logger) (*Application, error) {
 		return nil, err
 	}
 	handler := service.NewService(client, cfg.Kafka.Workers, logger)
-	return &Application{
+	application := &Application{
 		server:   srv,
 		consumer: consumer.NewPriceChangedConsumer(cfg.Kafka, handler, logger),
-	}, nil
+	}
+	if cfg.Telegram.MiniAppURL != "" {
+		application.poller = telegram.NewPoller(client, telegram.NewHandler(client, cfg.Telegram.MiniAppURL), logger)
+	}
+	return application, nil
 }
 
 func (a *Application) Run(ctx context.Context) error {
@@ -62,5 +67,8 @@ func (a *Application) Run(ctx context.Context) error {
 		return nil
 	})
 	group.Go(func() error { return a.consumer.Run(runCtx) })
+	if a.poller != nil {
+		group.Go(func() error { return a.poller.Run(runCtx) })
+	}
 	return group.Wait()
 }

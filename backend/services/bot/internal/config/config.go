@@ -64,8 +64,11 @@ func (c Config) Validate() error {
 	if c.Telegram.RequestTimeout <= 0 {
 		return fmt.Errorf("Telegram request_timeout must be positive")
 	}
-	if c.Telegram.MiniAppURL != "" && !validHTTPURL(c.Telegram.MiniAppURL) {
-		return fmt.Errorf("Telegram mini_app_url must be an absolute HTTP or HTTPS URL")
+	if c.Telegram.MiniAppURL != "" {
+		parsed, err := url.Parse(c.Telegram.MiniAppURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
+			return fmt.Errorf("Telegram mini_app_url must be an absolute HTTPS URL without credentials")
+		}
 	}
 	return nil
 }

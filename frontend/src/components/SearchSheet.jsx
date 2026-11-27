@@ -18,6 +18,7 @@ export default function SearchSheet({
   );
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
+  const [searchError, setSearchError] = useState('');
   const [loading, setLoading] = useState(false);
   const [nextPage, setNextPage] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -80,6 +81,7 @@ export default function SearchSheet({
         if (!active || requestIdRef.current !== currentRequest) return;
         setMarkets([]);
         setNextPage(null);
+        setSearchError('Не удалось загрузить рынки. Попробуйте ещё раз.');
       } finally {
         if (active && requestIdRef.current === currentRequest) {
           setLoading(false);
